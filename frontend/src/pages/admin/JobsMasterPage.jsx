@@ -34,6 +34,8 @@ import {
   Card,
   CardBody,
   Spinner,
+  Stack,
+  ButtonGroup,
 } from '@chakra-ui/react';
 import { 
   Search, 
@@ -51,7 +53,72 @@ import {
   Zap,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { formatRelative } from '../../lib/utils';
+import { formatRelative, formatIST } from '../../lib/relativeTime';
+
+function MetaRow({ label, children }) {
+  return (
+    <Box>
+      <Text fontSize="xs" textTransform="uppercase" color="gray.500" letterSpacing="wide" mb={0.5}>
+        {label}
+      </Text>
+      {children}
+    </Box>
+  );
+}
+
+function MetadataPanel({ job }) {
+  return (
+    <Box bg="gray.50" borderRadius="lg" p={5}>
+      <Heading size="xs" textTransform="uppercase" color="gray.500" letterSpacing="wider" mb={4}>
+        Job Metadata
+      </Heading>
+
+      <Stack spacing={4}>
+        {job.posted_at && (
+          <MetaRow label="Posted">
+            <Text fontWeight="semibold">{formatRelative(job.posted_at)}</Text>
+            <Text fontSize="xs" color="gray.500">{formatIST(job.posted_at)} IST</Text>
+          </MetaRow>
+        )}
+
+        {(job.applicant_count != null || job.applicant_signal) && (
+          <MetaRow label="Applicants">
+            <Text fontWeight="semibold">
+              {job.applicant_count != null ? job.applicant_count.toLocaleString('en-IN') : job.applicant_signal}
+            </Text>
+          </MetaRow>
+        )}
+
+        <MetaRow label="LinkedIn ID">
+          <Text fontFamily="mono" fontSize="sm">{job.linkedin_job_id}</Text>
+        </MetaRow>
+
+        <MetaRow label="Work Mode">
+          <Text fontWeight="semibold">{job.work_mode || '—'}</Text>
+        </MetaRow>
+
+        <MetaRow label="Employment Type">
+          <Text fontWeight="semibold">{job.employment_type || '—'}</Text>
+        </MetaRow>
+
+        <MetaRow label="Apply Type">
+          <Text fontWeight="semibold">
+            {job.apply_type}{job.apply_destination ? ` (${job.apply_destination})` : ''}
+          </Text>
+        </MetaRow>
+      </Stack>
+
+      {job.fetched_at && (
+        <>
+          <Divider my={4} />
+          <Box fontSize="xs" color="gray.500">
+            <Text>Fetched {formatIST(job.fetched_at)} IST</Text>
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+}
 
 export default function JobsMasterPage() {
   const [jobs, setJobs] = useState([]);
@@ -68,6 +135,7 @@ export default function JobsMasterPage() {
   });
   const [selectedJob, setSelectedJob] = useState(null);
   const [descMode, setDescMode] = useState('compact'); // compact | original
+  const [showFullCompany, setShowFullCompany] = useState(false);
   
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -107,18 +175,19 @@ export default function JobsMasterPage() {
   const handleViewJob = (job) => {
     setSelectedJob(job);
     setDescMode('compact');
+    setShowFullCompany(false);
     onOpen();
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, variant = 'subtle') => {
     const configs = {
-      pending_rating: { color: 'gray', label: 'Pending Rating' },
+      pending_rating: { color: 'yellow', label: 'Pending Rating' },
       rated: { color: 'blue', label: 'Rated' },
       categorized: { color: 'green', label: 'Categorized' },
       failed: { color: 'red', label: 'Failed' },
     };
     const config = configs[status] || { color: 'gray', label: status };
-    return <Badge colorScheme={config.color} variant="subtle">{config.label}</Badge>;
+    return <Badge colorScheme={config.color} variant={variant}>{config.label}</Badge>;
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -331,87 +400,135 @@ export default function JobsMasterPage() {
       </VStack>
 
       {/* Job Details Modal */}
-      <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
+      <Modal isOpen={isOpen} onClose={onClose} size="5xl" scrollBehavior="inside">
         <ModalOverlay />
         <ModalContent borderRadius="2xl">
-          <ModalHeader borderBottom="1px solid" borderColor="gray.100">
-            <VStack align="stretch" spacing={1}>
-              <HStack justify="space-between">
-                <Heading size="md">{selectedJob?.title}</Heading>
-                {getStatusBadge(selectedJob?.status)}
-              </HStack>
-              <HStack spacing={4} color="gray.500" fontSize="sm">
-                <HStack><Icon as={Building2} size={14} /><Text>{selectedJob?.company}</Text></HStack>
-                <HStack><Icon as={MapPin} size={14} /><Text>{selectedJob?.location}</Text></HStack>
+          <ModalHeader borderBottom="1px solid" borderColor="gray.100" pt={6} pb={4}>
+            <VStack align="stretch" spacing={2}>
+              <HStack justify="space-between" align="start">
+                <VStack align="stretch" spacing={2} flex="1">
+                  <HStack spacing={2} flexWrap="wrap">
+                    <Heading size="md">{selectedJob?.title}</Heading>
+                    {selectedJob?.is_promoted && <Badge colorScheme="orange">Promoted</Badge>}
+                    {selectedJob?.is_reposted && <Badge colorScheme="purple">Reposted</Badge>}
+                    {selectedJob && getStatusBadge(selectedJob.status)}
+                  </HStack>
+                  <HStack spacing={4} color="gray.600" fontSize="sm">
+                    <HStack spacing={1}>
+                      <Icon as={Briefcase} boxSize={4} />
+                      <Text fontWeight="medium">{selectedJob?.company}</Text>
+                      {selectedJob?.company_industry && (
+                        <Text color="gray.400">· {selectedJob.company_industry}</Text>
+                      )}
+                    </HStack>
+                    <HStack spacing={1}>
+                      <Icon as={MapPin} boxSize={4} />
+                      <Text>{selectedJob?.location}</Text>
+                    </HStack>
+                  </HStack>
+                </VStack>
               </HStack>
             </VStack>
           </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody py={6}>
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={8}>
-              <VStack align="stretch" spacing={6} gridColumn={{ md: 'span 2' }}>
+          <ModalCloseButton mt={2} />
+          <ModalBody py={6} px={6} pb={8}>
+            <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={8} templateColumns={{ base: '1fr', lg: '2fr 1fr' }}>
+              <VStack align="stretch" spacing={8}>
                 <Box>
-                  <HStack justify="space-between" mb={3}>
-                    <Heading size="sm" textTransform="uppercase" color="gray.400" letterSpacing="wider">
+                  <HStack justify="space-between" mb={4}>
+                    <Heading size="xs" textTransform="uppercase" color="gray.500" letterSpacing="wider">
                       {descMode === 'compact' ? 'Compact Description' : 'Full Description'}
                     </Heading>
-                    <HStack bg="gray.100" p={1} borderRadius="md" spacing={0}>
+                    <ButtonGroup size="xs" isAttached variant="outline">
                       <Button 
-                        size="xs" 
-                        variant={descMode === 'compact' ? 'solid' : 'ghost'}
                         colorScheme={descMode === 'compact' ? 'blue' : 'gray'}
+                        variant={descMode === 'compact' ? 'solid' : 'outline'}
                         onClick={() => setDescMode('compact')}
                       >
                         Compact
                       </Button>
                       <Button 
-                        size="xs" 
-                        variant={descMode === 'original' ? 'solid' : 'ghost'}
                         colorScheme={descMode === 'original' ? 'blue' : 'gray'}
+                        variant={descMode === 'original' ? 'solid' : 'outline'}
                         onClick={() => setDescMode('original')}
                       >
                         Original
                       </Button>
-                    </HStack>
+                    </ButtonGroup>
                   </HStack>
-                  <Text whiteSpace="pre-wrap" fontSize="sm" lineHeight="tall">
-                    {descMode === 'compact' 
-                      ? (selectedJob?.description_compact || selectedJob?.full_description || 'No description available.') 
-                      : (selectedJob?.full_description || 'No description available.')}
-                  </Text>
-                </Box>
-              </VStack>
-              <VStack align="stretch" spacing={6}>
-                <Box bg="gray.50" p={4} borderRadius="xl">
-                  <Heading size="xs" mb={3} textTransform="uppercase" color="gray.500">Job Metadata</Heading>
-                  <VStack align="stretch" spacing={3}>
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" fontWeight="bold">LINKEDIN ID</Text>
-                      <Text fontSize="sm">{selectedJob?.linkedin_job_id}</Text>
-                    </Box>
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" fontWeight="bold">WORK MODE</Text>
-                      <Text fontSize="sm">{selectedJob?.work_mode || 'Unknown'}</Text>
-                    </Box>
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" fontWeight="bold">EMPLOYMENT TYPE</Text>
-                      <Text fontSize="sm">{selectedJob?.employment_type || 'Unknown'}</Text>
-                    </Box>
-                    <Box>
-                      <Text fontSize="xs" color="gray.400" fontWeight="bold">APPLY TYPE</Text>
-                      <Text fontSize="sm">{selectedJob?.apply_type} ({selectedJob?.apply_destination})</Text>
-                    </Box>
-                  </VStack>
-                </Box>
-                {selectedJob?.company_details && (
+                  
                   <Box>
-                    <Heading size="xs" mb={3} textTransform="uppercase" color="gray.500">About Company</Heading>
-                    <Text fontSize="xs" color="gray.600" lineHeight="relaxed">
-                      {selectedJob.company_details}
-                    </Text>
+                    {descMode === 'compact' && selectedJob?.description_compact ? (
+                      selectedJob.description_compact.split('\n').filter(Boolean).map((line, i) => {
+                        const text = line.replace(/^-\s*/, '');
+                        return (
+                          <HStack key={i} align="start" spacing={3} mb={2.5}>
+                            <Box w="6px" h="6px" borderRadius="full" bg="blue.500" mt={2} flexShrink={0} />
+                            <Text fontSize="sm" color="gray.800" lineHeight="1.6">{text}</Text>
+                          </HStack>
+                        );
+                      })
+                    ) : (
+                      <Text whiteSpace="pre-wrap" fontSize="sm" lineHeight="1.6" color="gray.800">
+                        {selectedJob?.full_description || 'No description available.'}
+                      </Text>
+                    )}
+                  </Box>
+                </Box>
+
+                {selectedJob?.company_compact && (
+                  <Box borderTop="1px solid" borderColor="gray.100" pt={6}>
+                    <Heading size="xs" textTransform="uppercase" color="gray.500" letterSpacing="wider" mb={4}>
+                      About {selectedJob.company}
+                    </Heading>
+
+                    {(selectedJob.company_industry || selectedJob.company_size || selectedJob.company_followers != null) && (
+                      <HStack spacing={2} mb={4} flexWrap="wrap">
+                        {selectedJob.company_industry && (
+                          <Badge variant="subtle" colorScheme="blue">{selectedJob.company_industry}</Badge>
+                        )}
+                        {selectedJob.company_size && (
+                          <Badge variant="subtle" colorScheme="gray">{selectedJob.company_size}</Badge>
+                        )}
+                        {selectedJob.company_followers != null && (
+                          <Badge variant="subtle" colorScheme="gray">
+                            {selectedJob.company_followers.toLocaleString('en-IN')} followers
+                          </Badge>
+                        )}
+                      </HStack>
+                    )}
+
+                    <Box 
+                      whiteSpace="pre-wrap" 
+                      fontSize="sm" 
+                      color="gray.700" 
+                      lineHeight="1.6"
+                      sx={{ '& > div + div': { mt: 1 } }}
+                    >
+                      {selectedJob.company_compact.split('\n').map((line, i) => (
+                        <Box key={i}>{line}</Box>
+                      ))}
+                    </Box>
+
+                    {selectedJob.company_details && (
+                      <Button size="xs" variant="link" mt={3} colorScheme="blue" onClick={() => setShowFullCompany(s => !s)}>
+                        {showFullCompany ? 'Hide full description' : 'Read full company description'}
+                      </Button>
+                    )}
+                    {showFullCompany && (
+                      <Box mt={4} p={4} bg="gray.50" borderRadius="md">
+                        <Text fontSize="xs" color="gray.500" whiteSpace="pre-wrap" lineHeight="relaxed">
+                          {selectedJob.company_details}
+                        </Text>
+                      </Box>
+                    )}
                   </Box>
                 )}
               </VStack>
+
+              <Box>
+                {selectedJob && <MetadataPanel job={selectedJob} />}
+              </Box>
             </SimpleGrid>
           </ModalBody>
         </ModalContent>

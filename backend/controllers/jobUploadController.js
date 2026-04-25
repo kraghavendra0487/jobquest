@@ -158,6 +158,13 @@ const jobUploadController = {
         return res.json({ upload_id, inserted: 0, status: 'saved' });
       }
 
+      // Quick sanity check before insert — log a sample
+      console.log('[save] sample row fetched_at + posted_at:', {
+        fetched_at: cached.jobs[0]?.fetched_at,
+        posted_at: cached.jobs[0]?.posted_at,
+        posted_relative: cached.jobs[0]?.posted_relative,
+      });
+
       const inserted = await jobModel.bulkInsert(cached.jobs);
 
       await jobUploadModel.update(upload_id, { 

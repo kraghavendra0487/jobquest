@@ -162,6 +162,8 @@ function compressJD(text, { maxBullets = 12 } = {}) {
   return bullets.length ? bullets.map(b => '- ' + b).join('\n') : null;
 }
 
+const { compressCompany, extractStructured } = require('./companyCompact');
+
 // ─────────────────── main normalize() ───────────────────
 
 function normalize(row, { fetchedAt = null } = {}) {
@@ -175,6 +177,10 @@ function normalize(row, { fetchedAt = null } = {}) {
 
   // Promotion can also leak in via extra_info ("Viewed\nPromoted")
   const promoted_from_extra = /\bpromoted\b/i.test(String(row.extra_info || ''));
+
+  const company_details = row.company_details && row.company_details !== 'N/A' ? row.company_details : null;
+  const company_compact = compressCompany(company_details);
+  const { followers, industry, size } = extractStructured(company_details);
 
   return {
     valid: true,
@@ -201,10 +207,14 @@ function normalize(row, { fetchedAt = null } = {}) {
       fetched_at: fetchedAt,
       full_description: row.full_description || null,
       description_compact: compressJD(row.full_description),
-      company_details: row.company_details && row.company_details !== 'N/A' ? row.company_details : null,
+      company_details,
+      company_compact,
+      company_followers: followers,
+      company_industry: industry,
+      company_size: size,
       raw: row,
     },
   };
 }
 
-module.exports = { normalize, cleanTitle, cleanLocation, parseMeta, compressJD };
+module.exports = { normalize, cleanTitle, cleanLocation, parseMeta, compressJD, compressCompany, extractStructured };
