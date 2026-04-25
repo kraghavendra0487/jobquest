@@ -1,6 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const authRouter = require('./routers/authRouter');
+const schoolRouter = require('./routers/schoolRouter');
+const programRouter = require('./routers/programRouter');
+const userRouter = require('./routers/userRouter');
+const jobUploadRouter = require('./routers/jobUploadRouter');
 const { connectSupabase } = require('./config/supabase');
 
 const app = express();
@@ -20,10 +24,19 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/schools', schoolRouter);
+app.use('/api/programs', programRouter);
+app.use('/api/users', userRouter);
+app.use('/api/admin/job-uploads', jobUploadRouter);
 
-// Default response for all requests
+// Default 404 for API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.url} not found` });
+});
+
+// Default response for all other requests
 app.use((req, res) => {
-  res.send('Server is running and logging requests!');
+  res.status(404).send('Not Found');
 });
 
 app.listen(PORT, () => {
