@@ -40,9 +40,29 @@ import {
   PopoverCloseButton,
   Input,
   IconButton,
+  List,
+  ListItem,
+  ListIcon,
 } from '@chakra-ui/react';
-import { Upload, CheckCircle, AlertCircle, X, ArrowRight, Clock, FileText, User, Edit2 } from 'lucide-react';
+import { 
+  Upload, 
+  CheckCircle, 
+  AlertCircle, 
+  X, 
+  ArrowRight, 
+  Clock, 
+  FileText, 
+  User, 
+  Edit2, 
+  Building2, 
+  Tags, 
+  UserCheck, 
+  ExternalLink,
+  Circle
+} from 'lucide-react';
 import { apiUpload, api } from '../../lib/api';
+import { Link as RouterLink } from 'react-router-dom';
+import { supabase } from '../../lib/supabaseClient';
 
 export default function JobUploadsPage() {
   const [stage, setStage] = useState('idle'); // idle | previewing | preview_ready | saving | done
@@ -168,40 +188,119 @@ export default function JobUploadsPage() {
 
   if (stage === 'done') {
     return (
-      <VStack spacing={8} align="stretch" maxW="3xl" mx="auto" py={8}>
-        <Card shadow="xl" borderRadius="2xl" border="1px solid" borderColor="green.100" bg="green.50">
-          <CardBody>
-            <VStack spacing={6}>
-              <Icon as={CheckCircle} boxSize={12} color="green.500" />
-              <VStack spacing={2}>
-                <Heading size="lg">Upload Successful!</Heading>
-                <Text color="gray.600" textAlign="center">
-                  Successfully processed <b>{previewData.filename}</b>.
-                </Text>
-              </VStack>
-              <StatGroup w="full" textAlign="center">
+      <VStack spacing={8} align="stretch" maxW="4xl" mx="auto" py={8}>
+        <Card shadow="xl" borderRadius="2xl" border="1px solid" borderColor="green.100" bg="white">
+          <CardBody p={8}>
+            <VStack spacing={8} align="stretch">
+              <HStack spacing={6} align="start">
+                <Box bg="green.50" p={4} borderRadius="2xl">
+                  <Icon as={CheckCircle} boxSize={10} color="green.500" />
+                </Box>
+                <VStack align="stretch" spacing={1}>
+                  <Heading size="lg">Upload Saved!</Heading>
+                  <Text color="gray.500">
+                    Successfully processed <b>{previewData.filename}</b>. 
+                    Follow the checklist below to complete the pipeline.
+                  </Text>
+                </VStack>
+              </HStack>
+
+              <StatGroup bg="gray.50" p={6} borderRadius="xl" border="1px" borderColor="gray.100">
                 <Stat>
-                  <StatLabel>Inserted</StatLabel>
-                  <StatNumber color="green.600">{saveResult.inserted}</StatNumber>
+                  <StatLabel>New Jobs</StatLabel>
+                  <StatNumber color="green.600">+{saveResult.inserted}</StatNumber>
                 </Stat>
                 <Stat>
                   <StatLabel>Total Rows</StatLabel>
                   <StatNumber>{previewData.total_rows}</StatNumber>
                 </Stat>
               </StatGroup>
-              <Divider borderColor="green.200" />
-              <VStack align="stretch" w="full" spacing={3}>
-                <HStack color="green.700" fontSize="sm">
-                  <Icon as={ArrowRight} size={14} />
-                  <Text>Jobs are currently in <b>pending_rating</b> status.</Text>
-                </HStack>
-                <HStack color="green.700" fontSize="sm">
-                  <Icon as={ArrowRight} size={14} />
-                  <Text>AI rating and categorization pipeline has been started.</Text>
-                </HStack>
+
+              <Divider />
+
+              <VStack align="stretch" spacing={4}>
+                <Heading size="md">Pipeline Checklist</Heading>
+                <List spacing={4}>
+                  <ListItem bg="gray.50" p={4} borderRadius="lg" border="1px" borderColor="gray.200">
+                    <HStack justify="space-between">
+                      <HStack spacing={4}>
+                        <ListIcon as={CheckCircle} color="green.500" boxSize={6} />
+                        <VStack align="stretch" spacing={0}>
+                          <Text fontWeight="bold">1. Saved to DB</Text>
+                          <Text fontSize="sm" color="gray.500">{saveResult.inserted} jobs landed as pending_rating</Text>
+                        </VStack>
+                      </HStack>
+                      <Badge colorScheme="green">Completed</Badge>
+                    </HStack>
+                  </ListItem>
+
+                  <ListItem p={4} borderRadius="lg" border="1px" borderColor="blue.200" bg="blue.50">
+                    <HStack justify="space-between">
+                      <HStack spacing={4}>
+                        <ListIcon as={Building2} color="blue.500" boxSize={6} />
+                        <VStack align="stretch" spacing={0}>
+                          <Text fontWeight="bold">2. Rate Companies</Text>
+                          <Text fontSize="sm" color="gray.500">Rate the {saveResult.inserted} new companies for quality</Text>
+                        </VStack>
+                      </HStack>
+                      <Button 
+                        as={RouterLink} 
+                        to={`/admin/companies?upload_id=${saveResult.upload_id}&filter=unrated`} 
+                        size="sm" 
+                        colorScheme="blue" 
+                        rightIcon={<ArrowRight size={14} />}
+                      >
+                        Rate now
+                      </Button>
+                    </HStack>
+                  </ListItem>
+
+                  <ListItem p={4} borderRadius="lg" border="1px" borderColor="blue.200" bg="blue.50">
+                    <HStack justify="space-between">
+                      <HStack spacing={4}>
+                        <ListIcon as={Tags} color="blue.500" boxSize={6} />
+                        <VStack align="stretch" spacing={0}>
+                          <Text fontWeight="bold">3. Categorize Jobs</Text>
+                          <Text fontSize="sm" color="gray.500">Map jobs to schools (requires rating ≥ 4)</Text>
+                        </VStack>
+                      </HStack>
+                      <Button 
+                        as={RouterLink} 
+                        to={`/admin/categorization?upload_id=${saveResult.upload_id}&status=pending_categorization`} 
+                        size="sm" 
+                        colorScheme="blue" 
+                        rightIcon={<ArrowRight size={14} />}
+                      >
+                        Categorize
+                      </Button>
+                    </HStack>
+                  </ListItem>
+
+                  <ListItem p={4} borderRadius="lg" border="1px" borderColor="blue.200" bg="blue.50">
+                    <HStack justify="space-between">
+                      <HStack spacing={4}>
+                        <ListIcon as={UserCheck} color="blue.500" boxSize={6} />
+                        <VStack align="stretch" spacing={0}>
+                          <Text fontWeight="bold">4. Approve Tags</Text>
+                          <Text fontSize="sm" color="gray.500">Final review before students see jobs</Text>
+                        </VStack>
+                      </HStack>
+                      <Button 
+                        as={RouterLink} 
+                        to="/admin/approval-queue" 
+                        size="sm" 
+                        colorScheme="blue" 
+                        rightIcon={<ArrowRight size={14} />}
+                      >
+                        Review queue
+                      </Button>
+                    </HStack>
+                  </ListItem>
+                </List>
               </VStack>
-              <Button colorScheme="green" size="lg" w="full" onClick={handleCancel}>
-                Upload Another File
+
+              <Button variant="ghost" w="full" onClick={handleCancel}>
+                Return to History
               </Button>
             </VStack>
           </CardBody>

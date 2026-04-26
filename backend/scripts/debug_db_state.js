@@ -21,10 +21,26 @@ async function run() {
     .select('id, filename, fetched_at, created_at')
     .order('created_at', { ascending: false });
 
-  if (uErr) {
-    console.error('Error fetching uploads:', uErr);
+  console.log('\n--- COMPANIES SCHEMA CHECK ---');
+  const { data: columns, error: cErr } = await supabase
+    .rpc('get_table_columns', { table_name: 'companies' });
+
+  if (cErr) {
+    // If RPC doesn't exist, try a direct query to information_schema if possible
+    // but supabase-js doesn't allow direct queries to information_schema usually
+    // So let's just try to select the columns specifically
+    const { error: sErr } = await supabase
+      .from('companies')
+      .select('display_name, name_normalized')
+      .limit(1);
+    
+    if (sErr) {
+      console.log('Columns display_name/name_normalized MISSING or error:', sErr.message);
+    } else {
+      console.log('Columns display_name/name_normalized EXIST.');
+    }
   } else {
-    console.table(uploads);
+    console.log('Columns in companies table:', columns.map(c => c.column_name));
   }
 }
 

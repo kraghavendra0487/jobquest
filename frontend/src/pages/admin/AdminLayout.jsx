@@ -14,6 +14,11 @@ import {
   Briefcase,
   Building2,
   ChevronLeft,
+  Settings,
+  Terminal,
+  BarChart3,
+  CheckCircle2,
+  Tag,
 } from 'lucide-react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
@@ -23,6 +28,14 @@ const navItems = [
   { name: 'Job Uploads', icon: Upload, path: '/admin/job-uploads' },
   { name: 'Master Jobs', icon: Briefcase, path: '/admin/jobs' },
   { name: 'Companies', icon: Building2, path: '/admin/companies' },
+];
+
+const aiItems = [
+  { name: 'Categorization', icon: Tag, path: '/admin/categorization' },
+  { name: 'Approval Queue', icon: CheckCircle2, path: '/admin/approval-queue' },
+  { name: 'Prompts', icon: Settings, path: '/admin/prompts' },
+  { name: 'Playground', icon: Terminal, path: '/admin/ai-playground' },
+  { name: 'AI Analytics', icon: BarChart3, path: '/admin/ai-analytics' },
 ];
 
 export default function AdminLayout() {
@@ -58,6 +71,25 @@ export default function AdminLayout() {
                 justifyContent="flex-start"
                 leftIcon={<Icon as={item.icon} />}
                 size="md"
+                borderRadius="lg"
+              >
+                {item.name}
+              </Button>
+            ))}
+          </VStack>
+
+          <VStack align="stretch" spacing={2}>
+            <Text px={2} fontSize="xs" fontWeight="bold" color="gray.400" textTransform="uppercase">AI Infrastructure</Text>
+            {aiItems.map((item) => (
+              <Button
+                key={item.path}
+                as={Link}
+                to={item.path}
+                variant={location.pathname === item.path ? 'solid' : 'ghost'}
+                colorScheme={location.pathname === item.path ? 'blue' : 'gray'}
+                justifyContent="flex-start"
+                leftIcon={<Icon as={item.icon} />}
+                size="sm"
                 borderRadius="lg"
               >
                 {item.name}

@@ -5,6 +5,7 @@ const schoolRouter = require('./routers/schoolRouter');
 const programRouter = require('./routers/programRouter');
 const userRouter = require('./routers/userRouter');
 const jobUploadRouter = require('./routers/jobUploadRouter');
+const aiRouter = require('./routers/aiRouter');
 const { connectSupabase } = require('./config/supabase');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api/schools', schoolRouter);
 app.use('/api/programs', programRouter);
 app.use('/api/users', userRouter);
 app.use('/api/admin/job-uploads', jobUploadRouter);
+app.use('/api/admin/ai', aiRouter);
 
 // Default 404 for API routes
 app.use('/api', (req, res) => {

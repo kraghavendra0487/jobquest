@@ -13,6 +13,11 @@ import ProgramsPage from './pages/admin/ProgramsPage';
 import JobUploadsPage from './pages/admin/JobUploadsPage';
 import JobsMasterPage from './pages/admin/JobsMasterPage';
 import CompaniesPage from './pages/admin/CompaniesPage';
+import CategorizationPage from './pages/admin/CategorizationPage';
+import ApprovalQueuePage from './pages/admin/ApprovalQueuePage';
+import PromptsCRUDPage from './pages/admin/PromptsCRUDPage';
+import AIPlaygroundPage from './pages/admin/AIPlaygroundPage';
+import AIAnalyticsPage from './pages/admin/AIAnalyticsPage';
 
 // Routes
 import { RequireAuth } from './routes/RequireAuth';
@@ -148,6 +153,11 @@ function App() {
         <Route path="job-uploads" element={<JobUploadsPage />} />
         <Route path="jobs" element={<JobsMasterPage />} />
         <Route path="companies" element={<CompaniesPage />} />
+        <Route path="categorization" element={<CategorizationPage />} />
+        <Route path="approval-queue" element={<ApprovalQueuePage />} />
+        <Route path="prompts" element={<PromptsCRUDPage />} />
+        <Route path="ai-playground" element={<AIPlaygroundPage />} />
+        <Route path="ai-analytics" element={<AIAnalyticsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

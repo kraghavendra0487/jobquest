@@ -5,9 +5,9 @@ const jobModel = require('../models/jobModel');
 const jobUploadModel = require('../models/jobUploadModel');
 const uploadCache = require('../services/uploadCache');
 
-// Stub for Phase 5 pipeline
+// No-op for Phase 6 (manual pipeline)
 const kickOffPipeline = async (uploadId) => {
-  console.log(`[Phase 5 Stub] Kicking off pipeline for upload ${uploadId}`);
+  // Manual flow: Admin triggers rating and categorization from UI
 };
 
 const jobUploadController = {
@@ -182,7 +182,7 @@ const jobUploadController = {
         upload_id, 
         inserted, 
         status: 'saved',
-        pipeline_started: true 
+        manual_pipeline: true 
       });
 
     } catch (err) {
