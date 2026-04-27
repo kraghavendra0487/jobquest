@@ -7,6 +7,8 @@ import { useToast, Center, Spinner } from '@chakra-ui/react';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import DashboardPage from './pages/DashboardPage';
+import UserSchoolsPage from './pages/UserSchoolsPage';
+import JobProcessPage from './pages/JobProcessPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import SchoolsPage from './pages/admin/SchoolsPage';
 import ProgramsPage from './pages/admin/ProgramsPage';
@@ -21,6 +23,11 @@ import AIPlaygroundPage from './pages/admin/AIPlaygroundPage';
 import AIAnalyticsPage from './pages/admin/AIAnalyticsPage';
 import AIBatchesPage from './pages/admin/AIBatchesPage';
 import AIBatchDetailsPage from './pages/admin/AIBatchDetailsPage';
+
+// Wizard Pages
+import UploadWizardStep1 from './pages/admin/wizard/UploadWizardStep1';
+import UploadWizardStep2 from './pages/admin/wizard/UploadWizardStep2';
+import UploadWizardStep3 from './pages/admin/wizard/UploadWizardStep3';
 
 // Routes
 import { RequireAuth } from './routes/RequireAuth';
@@ -141,6 +148,32 @@ function App() {
       />
 
       <Route 
+        path="/schools" 
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              <UserSchoolsPage session={session} userData={userData} />
+            )}
+          </RequireAuth>
+        } 
+      />
+
+      <Route 
+        path="/job-process/*" 
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              <JobProcessPage session={session} userData={userData} />
+            )}
+          </RequireAuth>
+        } 
+      />
+
+      <Route 
         path="/admin" 
         element={
           <RequireAuth session={session}>
@@ -151,6 +184,9 @@ function App() {
         }
       >
         <Route index element={<Navigate to="/admin/schools" replace />} />
+        <Route path="upload-wizard" element={<UploadWizardStep1 />} />
+        <Route path="upload-wizard/:upload_id/preview" element={<UploadWizardStep2 />} />
+        <Route path="upload-wizard/:upload_id/rate" element={<UploadWizardStep3 />} />
         <Route path="schools" element={<SchoolsPage />} />
         <Route path="programs" element={<ProgramsPage />} />
         <Route path="job-uploads" element={<JobUploadsPage />} />

@@ -11,7 +11,7 @@ const { supabase } = require('../config/supabase');
 exports.rateBatch = async (req, res) => { 
   console.log('[rateBatch] Received request body:', JSON.stringify(req.body, null, 2));
   try {
-    const { company_ids, batch_size = 20, prompt_id, dry_run = false } = req.body; 
+    const { company_ids, batch_size = 20, prompt_id, dry_run = false, upload_id } = req.body; 
  
     if (!Array.isArray(company_ids) || !company_ids.length) { 
       console.warn('[rateBatch] Validation failed: company_ids missing or empty');
@@ -91,10 +91,16 @@ exports.rateBatch = async (req, res) => {
       estimated_cost_usd: estCost, 
       triggered_by: req.user.id, 
       status: 'pending', 
+      upload_id,
     }).select().single(); 
     
     if (batchErr) throw batchErr;
- 
+
+    // If this is for an upload, mark it as 'rating'
+    if (upload_id) {
+      await supabase.from('job_uploads').update({ status: 'rating' }).eq('id', upload_id);
+    }
+
     // Kick off the scheduler (fire-and-forget) 
     startBatch(batch.id, async (signal) => { 
       let succeeded = 0, failed = 0, actualTokens = 0, actualCost = 0; 
@@ -166,6 +172,17 @@ exports.rateBatch = async (req, res) => {
           actual_cost_usd: actualCost, 
         }).eq('id', batch.id); 
       } 
+
+      // If this batch was for a specific upload, mark the upload as 'rated'
+      if (upload_id) {
+        console.log(`[rate-batch ${batch.id}] marking upload ${upload_id} as rated`);
+        await supabase.from('job_uploads')
+          .update({ 
+            status: 'rated', 
+            rating_completed_at: new Date().toISOString() 
+          })
+          .eq('id', upload_id);
+      }
     }); 
  
     res.json({ batch_id: batch.id, status: 'pending', total_calls: chunks.length }); 

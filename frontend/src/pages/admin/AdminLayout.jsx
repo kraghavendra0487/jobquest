@@ -19,10 +19,12 @@ import {
   BarChart3,
   CheckCircle2,
   Tag,
+  Sparkles,
 } from 'lucide-react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
 const navItems = [
+  { name: 'Upload Wizard', icon: Sparkles, path: '/admin/upload-wizard', highlight: true },
   { name: 'Schools', icon: School, path: '/admin/schools' },
   { name: 'Programs', icon: BookOpen, path: '/admin/programs' },
   { name: 'Job Uploads', icon: Upload, path: '/admin/job-uploads' },
@@ -67,12 +69,13 @@ export default function AdminLayout() {
                 key={item.path}
                 as={Link}
                 to={item.path}
-                variant={location.pathname === item.path ? 'solid' : 'ghost'}
-                colorScheme={location.pathname === item.path ? 'blue' : 'gray'}
+                variant={location.pathname.startsWith(item.path) ? 'solid' : item.highlight ? 'outline' : 'ghost'}
+                colorScheme={location.pathname.startsWith(item.path) ? 'blue' : item.highlight ? 'blue' : 'gray'}
                 justifyContent="flex-start"
                 leftIcon={<Icon as={item.icon} />}
                 size="md"
                 borderRadius="lg"
+                fontWeight={item.highlight ? 'bold' : 'normal'}
               >
                 {item.name}
               </Button>

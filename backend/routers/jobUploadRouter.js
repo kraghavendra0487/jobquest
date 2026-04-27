@@ -19,11 +19,13 @@ router.use(requireAuth, requireAdmin);
 
 // Upload pipeline
 router.post('/preview', upload.single('file'), jobUploadController.preview);
+router.get('/:upload_id/preview-summary', jobUploadController.getPreviewSummary);
 router.post('/:upload_id/save', jobUploadController.save);
 router.post('/:upload_id/refetched-at', jobUploadController.refetchedAt);
 
 // Management
 router.get('/', jobUploadController.listUploads);
 router.get('/master-jobs', jobUploadController.listJobs);
+router.delete('/purge-all', jobUploadController.purgeAll);
 
 module.exports = router;
