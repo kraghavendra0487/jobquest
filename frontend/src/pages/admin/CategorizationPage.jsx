@@ -103,16 +103,35 @@ export default function CategorizationPage() {
       let query = supabase 
         .from('jobs') 
         .select(` 
-          id, title, status, work_mode, employment_type,  
-          companies(name, display_name, rating), 
-          visibility_count:job_school_visibility(count) 
+          id, title, status, work_mode, employment_type, company_id
         `); 
  
       if (uploadId) query = query.eq('upload_id', uploadId); 
  
       const { data, error } = await query.order('created_at', { ascending: false }); 
       if (error) throw error; 
-      setJobs(data || []); 
+
+      // Fetch companies separately to avoid relationship error
+      const companyIds = [...new Set((data || []).map(j => j.company_id))].filter(Boolean);
+      let companiesMap = {};
+      if (companyIds.length > 0) {
+        const { data: companiesData } = await supabase
+          .from('companies')
+          .select('id, name, display_name, rating')
+          .in('id', companyIds);
+        
+        companiesMap = (companiesData || []).reduce((acc, curr) => {
+          acc[curr.id] = curr;
+          return acc;
+        }, {});
+      }
+
+      const jobsWithCompanies = (data || []).map(j => ({
+        ...j,
+        companies: companiesMap[j.company_id] || null
+      }));
+
+      setJobs(jobsWithCompanies); 
     } catch (err) { 
       toast({ title: 'Fetch failed', description: err.message, status: 'error' }); 
     } finally { 
@@ -129,8 +148,7 @@ export default function CategorizationPage() {
                            statusFilter === 'pending_categorization' ? j.status === 'rated' : 
                            j.status === statusFilter; 
       const matchesMode = modeFilter === 'all' ? true : j.work_mode === modeFilter; 
-      const matchesSchool = schoolFilter === 'all' ? true :  
-                           j.job_school_visibility?.some(v => v.school_id === schoolFilter);
+      const matchesSchool = schoolFilter === 'all' ? true : false; // Temporarily disabled until JSV table is created
       return matchesSearch && matchesStatus && matchesMode && matchesSchool; 
     }); 
   }, [jobs, search, statusFilter, modeFilter, schoolFilter]); 
@@ -153,7 +171,7 @@ export default function CategorizationPage() {
   const handleDryRun = async () => {
     setIsEstimating(true);
     try {
-      const res = await fetch('/api/admin/jobs/categorize-batch', {
+      const res = await fetch('/api/admin/ai/jobs/categorize-batch', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -177,7 +195,7 @@ export default function CategorizationPage() {
 
   const startBatch = async () => { 
     try { 
-      const res = await fetch('/api/admin/jobs/categorize-batch', { 
+      const res = await fetch('/api/admin/ai/jobs/categorize-batch', { 
         method: 'POST', 
         headers: {  
           'Content-Type': 'application/json', 
@@ -309,7 +327,7 @@ export default function CategorizationPage() {
                 </Td> 
                 <Td> 
                   <Badge variant="subtle" colorScheme="blue"> 
-                    {j.visibility_count?.[0]?.count || 0} Schools 
+                    0 Schools 
                   </Badge> 
                 </Td> 
                 <Td textAlign="right"> 

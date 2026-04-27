@@ -4,7 +4,9 @@ function render(template, vars) {
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, key) => { 
     if (!(key in vars)) return _m;  // leave untouched if missing 
     const v = vars[key]; 
-    return typeof v === 'string' ? v : JSON.stringify(v); 
+    // Always stringify to ensure valid JSON if the template is JSON.
+    // If it's a string, JSON.stringify(v) will wrap it in quotes and escape internal quotes.
+    return JSON.stringify(v);
   }); 
 } 
  

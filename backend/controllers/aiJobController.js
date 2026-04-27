@@ -93,13 +93,13 @@ exports.categorizeBatch = async (req, res) => {
       const processJob = async (job) => {
         if (signal.aborted) return;
 
-        const userPayload = JSON.parse(render(prompt.user_template, { 
+        const userPayload = render(prompt.user_template, { 
           title: job.title,
           company: job.company,
           employment_type: job.employment_type,
           summary: job.description_compact,
           schools: schools.map(s => ({ id: s.id, name: s.name }))
-        })); 
+        }); 
 
         try { 
           const result = await chatJSON({ 
@@ -119,18 +119,43 @@ exports.categorizeBatch = async (req, res) => {
             for (const schoolId of schoolIds) {
               if (!schools.find(s => s.id === schoolId)) continue;
 
-              await supabase.from('job_school_visibility').upsert({
-                job_id: job.id,
-                school_id: schoolId,
-                is_approved: false,
-                ai_reason: result.parsed.reason || null
-              }, { onConflict: 'job_id,school_id' });
+              try {
+                const { error: visErr } = await supabase.from('job_school_visibility').upsert({
+                  job_id: job.id,
+                  school_id: schoolId,
+                  is_approved: false,
+                  ai_reason: result.parsed.reason || null
+                }, { onConflict: 'job_id,school_id' });
+                
+                if (visErr) {
+                  console.error(`[categorize-batch ${batch.id}] Failed to save visibility for job ${job.id}:`, visErr.message);
+                  // If table is missing, we still want to mark job as categorized so it doesn't keep retrying
+                  if (visErr.code === '42P01') {
+                    console.warn(`[categorize-batch] Table job_school_visibility is missing. Skipping visibility save.`);
+                  } else {
+                    throw visErr;
+                  }
+                }
+              } catch (upsertErr) {
+                console.error(`[categorize-batch] Upsert error for job ${job.id}:`, upsertErr.message);
+              }
             }
           }
           
           // Mark job as categorized
           await supabase.from('jobs').update({ status: 'categorized' }).eq('id', job.id);
           
+          // Log per-item result
+          await supabase.from('ai_batch_logs').insert({
+            batch_id: batch.id,
+            item_id: job.id,
+            item_name: job.title,
+            status: 'success',
+            output: result.parsed,
+            prompt_snapshot: `${prompt.system_prompt}\n\n${userPayload}`, // Log input prompt
+            tokens_used: result.promptTokens + result.completionTokens // Log total tokens
+          });
+
           succeeded += 1; 
           actualTokens += result.promptTokens + result.completionTokens; 
           actualCost += result.cost_usd; 
@@ -139,6 +164,15 @@ exports.categorizeBatch = async (req, res) => {
           // For per-job parse errors, set job status to failed
           await supabase.from('jobs').update({ status: 'failed' }).eq('id', job.id);
           
+          // Log per-item failure
+          await supabase.from('ai_batch_logs').insert({
+            batch_id: batch.id,
+            item_id: job.id,
+            item_name: job.title,
+            status: 'failed',
+            error: e.message
+          });
+
           if (/ENOTFOUND|ECONNREFUSED|timeout|401|invalid_api_key|missing/i.test(e.message)) throw e; 
           console.error(`[categorize-batch ${batch.id}] job ${job.id} failed:`, e.message); 
         } 

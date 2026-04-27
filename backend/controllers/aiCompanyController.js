@@ -9,26 +9,34 @@ const { supabase } = require('../config/supabase');
  * Body: { company_ids: [...], batch_size: 20, prompt_id?: uuid, dry_run?: bool }
  */
 exports.rateBatch = async (req, res) => { 
+  console.log('[rateBatch] Received request body:', JSON.stringify(req.body, null, 2));
   try {
     const { company_ids, batch_size = 20, prompt_id, dry_run = false } = req.body; 
  
     if (!Array.isArray(company_ids) || !company_ids.length) { 
+      console.warn('[rateBatch] Validation failed: company_ids missing or empty');
       return res.status(400).json({ error: 'company_ids required' }); 
     } 
  
-    // Load companies, filter out already-rated and locked 
+    // Load companies, filter out already-rated
     const { data: companies, error: fetchErr } = await supabase 
       .from('companies') 
-      .select('id, name, rating, rating_locked') 
+      .select('id, name, rating') 
       .in('id', company_ids); 
     
-    if (fetchErr) throw fetchErr;
+    if (fetchErr) {
+      console.error('[rateBatch] Supabase fetch error:', fetchErr);
+      throw fetchErr;
+    }
  
-    const eligible = companies.filter(c => c.rating === null && !c.rating_locked); 
+    const eligible = companies.filter(c => c.rating === null); 
     const skipped = companies.length - eligible.length; 
+    
+    console.log(`[rateBatch] Stats: total=${companies.length}, eligible=${eligible.length}, skipped=${skipped}`);
  
     if (eligible.length === 0) { 
-      return res.status(400).json({ error: 'All selected companies are already rated or locked', skipped }); 
+      console.warn('[rateBatch] No eligible companies found (all already rated)');
+      return res.status(400).json({ error: 'All selected companies are already rated', skipped }); 
     } 
  
     // Load prompt 
@@ -94,9 +102,9 @@ exports.rateBatch = async (req, res) => {
       for (const chunk of chunks) { 
         if (signal.aborted) throw new Error('Cancelled by admin'); 
  
-        const userPayload = JSON.parse(render(prompt.user_template, { 
+        const userPayload = render(prompt.user_template, { 
           companies: chunk.map(c => ({ name: c.name })) 
-        })); 
+        }); 
  
         try { 
           const result = await chatJSON({ 
@@ -115,15 +123,30 @@ exports.rateBatch = async (req, res) => {
             // Match back by name (case-insensitive) 
             const matched = chunk.find(c => c.name.toLowerCase() === String(r.name || '').toLowerCase()); 
             if (!matched) continue; 
-            if (![1, 2, 3, 4, 5].includes(r.rating)) continue; 
             
-            await supabase.from('companies').update({ 
-              rating: r.rating, 
-              reason: r.reason || null, 
-              updated_at: new Date().toISOString(), 
-              rated_by: 'ai', 
-              rated_by_user: null // Clear user if AI rerated
-            }).eq('id', matched.id); 
+            const isValidRating = [1, 2, 3, 4, 5].includes(r.rating);
+            
+            if (isValidRating) {
+              await supabase.from('companies').update({ 
+                rating: r.rating, 
+                reason: r.reason || null, 
+                updated_at: new Date().toISOString(), 
+                rated_by: 'ai', 
+                rated_by_user: null // Clear user if AI rerated
+              }).eq('id', matched.id); 
+            }
+
+            // Log per-item result
+            await supabase.from('ai_batch_logs').insert({
+              batch_id: batch.id,
+              item_id: matched.id,
+              item_name: matched.name,
+              status: isValidRating ? 'success' : 'failed',
+              output: r,
+              prompt_snapshot: `${prompt.system_prompt}\n\n${userPayload}`, // Log input prompt
+              tokens_used: result.promptTokens + result.completionTokens, // Log total tokens for this call
+              error: isValidRating ? null : 'Invalid rating value from AI'
+            });
           } 
           succeeded += 1; // succeeded one call
           actualTokens += result.promptTokens + result.completionTokens; 
@@ -151,3 +174,70 @@ exports.rateBatch = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 }; 
+
+/**
+ * POST /api/admin/companies/:id/rate-ai
+ * Body: { prompt_id?: uuid, system_prompt?: string, user_input?: string }
+ */
+exports.rateSingle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt_id, system_prompt, user_input } = req.body;
+
+    // 1. Fetch company
+    const { data: company, error: companyErr } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (companyErr || !company) return res.status(404).json({ error: 'Company not found' });
+
+    // 2. Prepare AI call
+    let finalSystemPrompt = system_prompt;
+    let finalUserInput = user_input;
+
+    if (!finalSystemPrompt || !finalUserInput) {
+      let prompt;
+      if (prompt_id) {
+        const { data, error } = await supabase.from('prompts').select('*').eq('id', prompt_id).single();
+        if (error) throw new Error('Prompt not found');
+        prompt = data;
+      } else {
+        prompt = await loadDefault('rate_company');
+      }
+      finalSystemPrompt = finalSystemPrompt || prompt.system_prompt;
+      if (!finalUserInput) {
+        finalUserInput = render(prompt.user_template, { 
+          companies: [{ name: company.name }] 
+        });
+      }
+    }
+
+    // 3. Call AI
+    const result = await chatJSON({
+      systemPrompt: finalSystemPrompt,
+      userPayload: finalUserInput,
+      purpose: 'rate_company_single',
+      promptId: prompt_id,
+      triggeredBy: req.user.id,
+    });
+
+    // 4. Parse and update
+    const ratingData = result.parsed?.ratings?.[0] || result.parsed;
+    if (ratingData && [1, 2, 3, 4, 5].includes(ratingData.rating)) {
+      await supabase.from('companies').update({
+        rating: ratingData.rating,
+        reason: ratingData.reason || null,
+        updated_at: new Date().toISOString(),
+        rated_by: 'ai',
+        rated_by_user: null
+      }).eq('id', id);
+    }
+
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[rateSingle] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+};

@@ -33,8 +33,9 @@ const navItems = [
 const aiItems = [
   { name: 'Categorization', icon: Tag, path: '/admin/categorization' },
   { name: 'Approval Queue', icon: CheckCircle2, path: '/admin/approval-queue' },
+  { name: 'AI Test', icon: Terminal, path: '/admin/ai-playground' },
   { name: 'Prompts', icon: Settings, path: '/admin/prompts' },
-  { name: 'Playground', icon: Terminal, path: '/admin/ai-playground' },
+  { name: 'AI Batches', icon: Terminal, path: '/admin/ai-batches' },
   { name: 'AI Analytics', icon: BarChart3, path: '/admin/ai-analytics' },
 ];
 

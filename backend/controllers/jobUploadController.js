@@ -167,6 +167,48 @@ const jobUploadController = {
 
       const inserted = await jobModel.bulkInsert(cached.jobs);
 
+      // === Phase 4.7: Populate companies + link FK ===
+      const { extractUniqueCompanies } = require('../utils/companyExtract');
+      const { supabase } = require('../config/supabase');
+
+      const companyRows = extractUniqueCompanies(cached.jobs);
+      let companiesUpserted = 0;
+      let jobsLinked = 0;
+
+      if (companyRows.length > 0) {
+        // Upsert companies on `name` (which we set to lowercase normalized).
+        // onConflict: 'name' — name is already UNIQUE per migration 006.
+        const { data: upserted, error: upsertErr } = await supabase
+          .from('companies')
+          .upsert(companyRows, { onConflict: 'name', ignoreDuplicates: false })
+          .select('id, name');
+
+        if (upsertErr) {
+          console.error('[save] company upsert failed:', upsertErr.message);
+          // Do NOT fail the whole save. Jobs are inserted, FK linking can be retried later.
+        } else {
+          companiesUpserted = upserted.length;
+          // Build name -> id lookup
+          const idByName = Object.fromEntries(upserted.map(c => [c.name, c.id]));
+
+          // Update jobs.company_id for this upload. One UPDATE per company is fine at this scale.
+          for (const [norm, id] of Object.entries(idByName)) {
+            const { error: linkErr, count } = await supabase
+              .from('jobs')
+              .update({ company_id: id }, { count: 'exact' })
+              .eq('upload_id', upload_id)
+              .ilike('company', norm);  // case-insensitive match
+            if (linkErr) {
+              console.error(`[save] link failed for "${norm}":`, linkErr.message);
+            } else {
+              jobsLinked += count || 0;
+            }
+          }
+        }
+      }
+
+      console.log(`[save] upload ${upload_id}: jobs=${inserted}, companies=${companiesUpserted}, links=${jobsLinked}`);
+
       await jobUploadModel.update(upload_id, { 
         status: 'saved', 
         inserted_rows: inserted 

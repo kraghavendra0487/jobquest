@@ -152,8 +152,8 @@ export default function AIAnalyticsPage() {
         <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6}> 
           <Box bg="white" p={6} borderRadius="xl" border="1px" borderColor="gray.200"> 
             <Heading size="xs" mb={6} textTransform="uppercase" color="gray.500">Spend per Day (Last 30d)</Heading> 
-            <Box h="300px"> 
-              <ResponsiveContainer width="100%" height="100%"> 
+            <Box h="300px" minW="0"> 
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}> 
                 <LineChart data={chartData}> 
                   <CartesianGrid strokeDasharray="3 3" vertical={false} /> 
                   <XAxis dataKey="date" fontSize={10} /> 
@@ -169,8 +169,8 @@ export default function AIAnalyticsPage() {
  
           <Box bg="white" p={6} borderRadius="xl" border="1px" borderColor="gray.200"> 
             <Heading size="xs" mb={6} textTransform="uppercase" color="gray.500">Daily Failures</Heading> 
-            <Box h="300px"> 
-              <ResponsiveContainer width="100%" height="100%"> 
+            <Box h="300px" minW="0"> 
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}> 
                 <BarChart data={chartData}> 
                   <CartesianGrid strokeDasharray="3 3" vertical={false} /> 
                   <XAxis dataKey="date" fontSize={10} /> 

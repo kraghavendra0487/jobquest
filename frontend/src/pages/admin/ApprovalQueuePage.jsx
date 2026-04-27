@@ -56,15 +56,52 @@ export default function ApprovalQueuePage() {
         .from('job_school_visibility') 
         .select(` 
           id, job_id, school_id, ai_reason, created_at, 
-          jobs(title, companies(name, display_name)), 
+          jobs(title, company_id), 
           schools(name) 
         `) 
         .eq('is_approved', false) 
         .is('rejected_at', null) 
         .order('created_at', { ascending: false }); 
- 
-      if (error) throw error; 
-      setItems(data || []); 
+
+      if (error) {
+        if (error.code === 'PGRST116' || error.message.includes('job_school_visibility')) {
+          toast({ 
+            title: 'Database Table Missing', 
+            description: 'The job_school_visibility table is missing. Please run migration 007 in your Supabase SQL Editor.', 
+            status: 'warning',
+            duration: 10000,
+            isClosable: true
+          });
+          setItems([]);
+          return;
+        }
+        throw error;
+      } 
+
+      // Fetch companies separately to avoid relationship error
+      const companyIds = [...new Set((data || []).map(item => item.jobs?.company_id))].filter(Boolean);
+      let companiesMap = {};
+      if (companyIds.length > 0) {
+        const { data: companiesData } = await supabase
+          .from('companies')
+          .select('id, name, display_name')
+          .in('id', companyIds);
+        
+        companiesMap = (companiesData || []).reduce((acc, curr) => {
+          acc[curr.id] = curr;
+          return acc;
+        }, {});
+      }
+
+      const itemsWithCompanies = (data || []).map(item => ({
+        ...item,
+        jobs: item.jobs ? {
+          ...item.jobs,
+          companies: companiesMap[item.jobs.company_id] || null
+        } : null
+      }));
+
+      setItems(itemsWithCompanies); 
     } catch (err) { 
       toast({ title: 'Fetch failed', description: err.message, status: 'error' }); 
     } finally { 

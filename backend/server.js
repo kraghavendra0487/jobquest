@@ -31,6 +31,16 @@ app.use('/api/users', userRouter);
 app.use('/api/admin/job-uploads', jobUploadRouter);
 app.use('/api/admin/ai', aiRouter);
 
+// Global Error Handler for API routes
+app.use('/api', (err, req, res, next) => {
+  console.error(`[API Error] ${req.method} ${req.url}:`, err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    path: req.url,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Default 404 for API routes
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `Route ${req.method} ${req.url} not found` });

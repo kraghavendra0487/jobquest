@@ -22,25 +22,24 @@ async function run() {
     .order('created_at', { ascending: false });
 
   console.log('\n--- COMPANIES SCHEMA CHECK ---');
-  const { data: columns, error: cErr } = await supabase
-    .rpc('get_table_columns', { table_name: 'companies' });
-
-  if (cErr) {
-    // If RPC doesn't exist, try a direct query to information_schema if possible
-    // but supabase-js doesn't allow direct queries to information_schema usually
-    // So let's just try to select the columns specifically
-    const { error: sErr } = await supabase
-      .from('companies')
-      .select('display_name, name_normalized')
-      .limit(1);
-    
-    if (sErr) {
-      console.log('Columns display_name/name_normalized MISSING or error:', sErr.message);
-    } else {
-      console.log('Columns display_name/name_normalized EXIST.');
-    }
+  const { data: companies, error: sErr } = await supabase
+    .from('companies')
+    .select('*')
+    .limit(1);
+  
+  if (sErr) {
+    console.log('Error selecting from companies:', sErr.message);
+  } else if (companies.length > 0) {
+    console.log('Columns in companies table:', Object.keys(companies[0]));
   } else {
-    console.log('Columns in companies table:', columns.map(c => c.column_name));
+    console.log('Companies table is empty. Trying to get columns via RPC...');
+    const { data: columns, error: cErr } = await supabase
+      .rpc('get_table_columns', { table_name: 'companies' });
+    if (cErr) {
+      console.log('Could not get columns via RPC:', cErr.message);
+    } else {
+      console.log('Columns in companies table:', columns.map(c => c.column_name));
+    }
   }
 }
 

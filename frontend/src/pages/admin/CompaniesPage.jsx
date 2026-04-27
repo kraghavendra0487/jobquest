@@ -16,6 +16,7 @@ import {
   Checkbox, 
   Badge, 
   IconButton, 
+  Icon,
   useDisclosure, 
   Modal, 
   ModalOverlay, 
@@ -33,7 +34,14 @@ import {
   MenuButton, 
   MenuList, 
   MenuItem, 
+  MenuItemOption,
+  MenuOptionGroup,
   Collapse,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
   FormControl,
   FormLabel,
   RadioGroup,
@@ -44,8 +52,6 @@ import { useState, useEffect, useMemo } from 'react';
 import {  
   Search,  
   RotateCcw,  
-  Lock,  
-  Unlock,  
   Eye,  
   Settings2,  
   Download,  
@@ -55,7 +61,8 @@ import {
   XCircle,  
   ArrowRight, 
   ChevronDown,
-  ExternalLink
+  ExternalLink,
+  Sparkles
 } from 'lucide-react'; 
 import { supabase } from '../../lib/supabaseClient'; 
 import { useNavigate, useSearchParams } from 'react-router-dom'; 
@@ -68,8 +75,7 @@ export default function CompaniesPage() {
   const initialFilter = searchParams.get('filter');
 
   const [search, setSearch] = useState(''); 
-  const [ratingFilter, setRatingFilter] = useState(initialFilter === 'unrated' ? 'unrated' : 'all'); 
-  const [lockedFilter, setLockedFilter] = useState('all'); 
+  const [selectedRatings, setSelectedRatings] = useState([]); 
   const [selectedIds, setSelectedIds] = useState([]); 
   const [showTools, setShowTools] = useState(false); 
   const toast = useToast(); 
@@ -79,6 +85,8 @@ export default function CompaniesPage() {
   const [editingCompany, setEditingCompany] = useState(null);
   const [manualRating, setManualRating] = useState('3');
   const [isSavingManual, setIsSavingManual] = useState(false);
+
+  const [tabIndex, setTabIndex] = useState(initialFilter === 'unrated' ? 1 : 0);
 
   useEffect(() => { 
     fetchCompanies(); 
@@ -149,9 +157,22 @@ export default function CompaniesPage() {
  
   // Batch State 
   const [batchPrompt, setBatchPrompt] = useState('default'); 
+  const [prompts, setPrompts] = useState([]);
   const [batchSize, setBatchSize] = useState(20); 
   const [preflightStatus, setPreflightStatus] = useState(null); 
   const [isPreflighting, setIsPreflighting] = useState(false);
+
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      const { data } = await supabase
+        .from('prompts')
+        .select('id, name, purpose')
+        .eq('purpose', 'company_rating')
+        .eq('is_archived', false);
+      setPrompts(data || []);
+    };
+    fetchPrompts();
+  }, []);
 
   const handleManualRate = async () => {
     setIsSavingManual(true);
@@ -160,9 +181,7 @@ export default function CompaniesPage() {
         .from('companies')
         .update({
           rating: parseInt(manualRating),
-          rating_locked: true,
-          rated_by: 'manual',
-          rated_at: new Date().toISOString()
+          rated_by: 'manual'
         })
         .eq('id', editingCompany.id);
 
@@ -176,37 +195,24 @@ export default function CompaniesPage() {
       setIsSavingManual(false);
     }
   };
-
-  const toggleLock = async (company) => {
-    try {
-      const { error } = await supabase
-        .from('companies')
-        .update({ rating_locked: !company.rating_locked })
-        .eq('id', company.id);
-      
-      if (error) throw error;
-      fetchCompanies();
-    } catch (err) {
-      toast({ title: 'Toggle failed', description: err.message, status: 'error' });
-    }
-  };
  
   const filteredCompanies = useMemo(() => { 
     return companies.filter(c => { 
       const nameForSearch = (c.display_name || c.name || '').toLowerCase();
-      const normalizedForSearch = (c.name_normalized || '').toLowerCase();
+      const normalizedForSearch = (c.name || '').toLowerCase();
       const searchTerm = search.toLowerCase();
 
       const matchesSearch = nameForSearch.includes(searchTerm) ||  
                            normalizedForSearch.includes(searchTerm); 
-      const matchesRating = ratingFilter === 'all' ? true :  
-                           ratingFilter === 'unrated' ? c.rating === null :  
-                           c.rating === parseInt(ratingFilter); 
-      const matchesLocked = lockedFilter === 'all' ? true :  
-                           lockedFilter === 'locked' ? c.rating_locked : !c.rating_locked; 
-      return matchesSearch && matchesRating && matchesLocked; 
+      
+      // Tab-based filtering
+      const matchesTab = tabIndex === 0 ? c.rating !== null : c.rating === null;
+
+      const matchesRating = selectedRatings.length === 0 ? true : 
+                           selectedRatings.includes(c.rating?.toString());
+      return matchesSearch && matchesRating && matchesTab; 
     }); 
-  }, [companies, search, ratingFilter, lockedFilter]); 
+  }, [companies, search, selectedRatings, tabIndex]); 
  
   const toggleSelect = (id) => { 
     setSelectedIds(prev =>  
@@ -239,7 +245,7 @@ export default function CompaniesPage() {
  
   const startBatch = async () => { 
     try { 
-      const res = await fetch('/api/admin/companies/rate-batch', { 
+      const res = await fetch('/api/admin/ai/companies/rate-batch', { 
         method: 'POST', 
         headers: {  
           'Content-Type': 'application/json', 
@@ -248,7 +254,7 @@ export default function CompaniesPage() {
         body: JSON.stringify({ 
           company_ids: selectedIds.filter(id => { 
             const c = companies.find(comp => comp.id === id); 
-            return c && c.rating === null && !c.rating_locked; 
+            return c && c.rating === null; 
           }), 
           batch_size: batchSize, 
           prompt_id: batchPrompt === 'default' ? null : batchPrompt 
@@ -269,14 +275,13 @@ export default function CompaniesPage() {
     const selectedCompanies = companies.filter(c => selectedIds.includes(c.id));
     if (selectedCompanies.length === 0) return;
 
-    const headers = ['Name', 'Display Name', 'Rating', 'Locked', 'Job Count'];
+    const headers = ['Name', 'Display Name', 'Rating', 'Job Count'];
     const csvContent = [
       headers.join(','),
       ...selectedCompanies.map(c => [
-        `"${c.name_normalized}"`,
+        `"${c.name}"`,
         `"${c.display_name || ''}"`,
         c.rating || 'Unrated',
-        c.rating_locked ? 'Yes' : 'No',
         c.job_count?.[0]?.count || 0
       ].join(','))
     ].join('\n');
@@ -292,9 +297,94 @@ export default function CompaniesPage() {
 
   const unratedSelected = selectedIds.filter(id => { 
     const c = companies.find(comp => comp.id === id); 
-    return c && c.rating === null && !c.rating_locked; 
+    return c && c.rating === null; 
   }).length; 
- 
+
+  const renderTable = () => (
+    <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" overflow="hidden"> 
+      <Table variant="simple"> 
+        <Thead bg="gray.50"> 
+          <Tr> 
+            <Th w="40px"> 
+              <Checkbox  
+                isChecked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0} 
+                isIndeterminate={selectedIds.length > 0 && selectedIds.length < filteredCompanies.length} 
+                onChange={toggleSelectAll} 
+              /> 
+            </Th> 
+            <Th>Name</Th> 
+            <Th>Rating</Th> 
+            <Th># Jobs</Th> 
+            <Th>Rated At</Th> 
+            <Th textAlign="right">Actions</Th> 
+          </Tr> 
+        </Thead> 
+        <Tbody> 
+          {loading ? ( 
+            <Tr><Td colSpan={7} textAlign="center" py={10}><Spinner color="blue.500" /></Td></Tr> 
+          ) : filteredCompanies.length === 0 ? ( 
+            <Tr><Td colSpan={7} textAlign="center" py={10} color="gray.500">No companies found matching filters</Td></Tr> 
+          ) : filteredCompanies.map(c => ( 
+            <Tr key={c.id}> 
+              <Td> 
+                <Checkbox  
+                  isChecked={selectedIds.includes(c.id)}  
+                  onChange={() => toggleSelect(c.id)} 
+                /> 
+              </Td> 
+              <Td> 
+                <VStack align="start" spacing={0}> 
+                  <Text fontWeight="bold">{c.display_name || c.name}</Text> 
+                </VStack> 
+              </Td> 
+              <Td> 
+                {c.rating ? ( 
+                  <Badge colorScheme={c.rating >= 4 ? 'green' : c.rating >= 3 ? 'blue' : 'gray'}> 
+                    {c.rating} Stars 
+                  </Badge> 
+                ) : ( 
+                  <Badge colorScheme="gray" variant="outline">Unrated</Badge> 
+                )} 
+              </Td> 
+              <Td>{c.job_count?.[0]?.count || 0}</Td> 
+              <Td fontSize="sm" color="gray.500"> 
+                {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '-'} 
+              </Td> 
+              <Td textAlign="right"> 
+                <HStack justify="end" spacing={2}> 
+                  {tabIndex === 1 && (
+                    <Button
+                      size="xs"
+                      leftIcon={<Sparkles size={12} />}
+                      colorScheme="purple"
+                      onClick={() => navigate(`/admin/companies/${c.id}/rate`)}
+                    >
+                      Rate
+                    </Button>
+                  )}
+                  <IconButton  
+                    size="sm"  
+                    icon={<Eye size={14} />}  
+                    variant="ghost"  
+                    aria-label="View jobs"  
+                    onClick={() => navigate(`/admin/jobs?company_id=${c.id}`)} 
+                  /> 
+                  <IconButton  
+                    size="sm"  
+                    icon={<Settings2 size={14} />}  
+                    variant="ghost"  
+                    aria-label="Edit rating"  
+                    onClick={() => { setEditingCompany(c); setManualRating(c.rating?.toString() || '3'); onRatingOpen(); }} 
+                  /> 
+                </HStack> 
+              </Td> 
+            </Tr> 
+          ))} 
+        </Tbody> 
+      </Table> 
+    </Box>
+  );
+
   return ( 
     <Box> 
       <HStack justify="space-between" mb={6}> 
@@ -334,119 +424,59 @@ export default function CompaniesPage() {
               onChange={(e) => setSearch(e.target.value)} 
             /> 
           </HStack> 
-          <Select w="150px" value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)}> 
-            <option value="all">Rating: Any</option> 
-            <option value="unrated">Unrated</option> 
-            <option value="1">1 Star</option> 
-            <option value="2">2 Stars</option> 
-            <option value="3">3 Stars</option> 
-            <option value="4">4 Stars</option> 
-            <option value="5">5 Stars</option> 
-          </Select> 
-          <Select w="150px" value={lockedFilter} onChange={(e) => setLockedFilter(e.target.value)}> 
-            <option value="all">Locked: Any</option> 
-            <option value="locked">Locked</option> 
-            <option value="unlocked">Unlocked</option> 
-          </Select> 
+          <Menu closeOnSelect={false}>
+            <MenuButton 
+              as={Button} 
+              variant="outline" 
+              rightIcon={<ChevronDown size={16} />}
+              w="180px"
+              textAlign="left"
+              fontWeight="normal"
+            >
+              {selectedRatings.length === 0 
+                ? 'Rating: Any' 
+                : `Rating: ${selectedRatings.sort().map(r => `${r}★`).join(', ')}`}
+            </MenuButton>
+            <MenuList zIndex={10}>
+              <MenuOptionGroup 
+                title="Select Ratings" 
+                type="checkbox" 
+                value={selectedRatings}
+                onChange={(vals) => setSelectedRatings(vals)}
+              >
+                <MenuItemOption value="1">1 Star</MenuItemOption>
+                <MenuItemOption value="2">2 Stars</MenuItemOption>
+                <MenuItemOption value="3">3 Stars</MenuItemOption>
+                <MenuItemOption value="4">4 Stars</MenuItemOption>
+                <MenuItemOption value="5">5 Stars</MenuItemOption>
+              </MenuOptionGroup>
+            </MenuList>
+          </Menu>
           <IconButton  
             icon={<RotateCcw size={18} />}  
             variant="ghost"  
-            onClick={() => { setSearch(''); setRatingFilter('all'); setLockedFilter('all'); }} 
+            onClick={() => { setSearch(''); setSelectedRatings([]); }} 
             aria-label="Reset filters" 
           /> 
         </HStack> 
       </Box> 
  
-      {/* Section B: Companies Table */} 
-      <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" overflow="hidden"> 
-        <Table variant="simple"> 
-          <Thead bg="gray.50"> 
-            <Tr> 
-              <Th w="40px"> 
-                <Checkbox  
-                  isChecked={selectedIds.length === filteredCompanies.length && filteredCompanies.length > 0} 
-                  isIndeterminate={selectedIds.length > 0 && selectedIds.length < filteredCompanies.length} 
-                  onChange={toggleSelectAll} 
-                /> 
-              </Th> 
-              <Th>Name</Th> 
-              <Th>Rating</Th> 
-              <Th>Locked</Th> 
-              <Th># Jobs</Th> 
-              <Th>Rated At</Th> 
-              <Th textAlign="right">Actions</Th> 
-            </Tr> 
-          </Thead> 
-          <Tbody> 
-            {loading ? ( 
-              <Tr><Td colSpan={7} textAlign="center" py={10}><Spinner color="blue.500" /></Td></Tr> 
-            ) : filteredCompanies.length === 0 ? ( 
-              <Tr><Td colSpan={7} textAlign="center" py={10} color="gray.500">No companies found matching filters</Td></Tr> 
-            ) : filteredCompanies.map(c => ( 
-              <Tr key={c.id}> 
-                <Td> 
-                  <Checkbox  
-                    isChecked={selectedIds.includes(c.id)}  
-                    onChange={() => toggleSelect(c.id)} 
-                  /> 
-                </Td> 
-                <Td> 
-                  <VStack align="start" spacing={0}> 
-                    <Text fontWeight="bold">{c.display_name || c.name_normalized}</Text> 
-                    <Text fontSize="xs" color="gray.400">{c.name_normalized}</Text> 
-                  </VStack> 
-                </Td> 
-                <Td> 
-                  {c.rating ? ( 
-                    <Badge colorScheme={c.rating >= 4 ? 'green' : c.rating >= 3 ? 'blue' : 'gray'}> 
-                      {c.rating} Stars 
-                    </Badge> 
-                  ) : ( 
-                    <Badge colorScheme="gray" variant="outline">Unrated</Badge> 
-                  )} 
-                </Td> 
-                <Td> 
-                  {c.rating_locked ? ( 
-                    <Icon as={Lock} size={14} color="orange.400" /> 
-                  ) : ( 
-                    <Icon as={Unlock} size={14} color="gray.300" /> 
-                  )} 
-                </Td> 
-                <Td>{c.job_count?.[0]?.count || 0}</Td> 
-                <Td fontSize="sm" color="gray.500"> 
-                  {c.rated_at ? new Date(c.rated_at).toLocaleDateString() : '-'} 
-                </Td> 
-                <Td textAlign="right"> 
-                  <HStack justify="end" spacing={2}> 
-                    <IconButton  
-                      size="sm"  
-                      icon={<Eye size={14} />}  
-                      variant="ghost"  
-                      aria-label="View jobs"  
-                      onClick={() => navigate(`/admin/jobs?company_id=${c.id}`)} 
-                    /> 
-                    <IconButton  
-                      size="sm"  
-                      icon={<Settings2 size={14} />}  
-                      variant="ghost"  
-                      aria-label="Edit rating"  
-                      onClick={() => { setEditingCompany(c); setManualRating(c.rating?.toString() || '3'); onRatingOpen(); }} 
-                    /> 
-                    <IconButton  
-                      size="sm"  
-                      icon={c.rating_locked ? <Lock size={14} /> : <Unlock size={14} />}  
-                      variant="ghost"  
-                      color={c.rating_locked ? 'orange.400' : 'gray.300'} 
-                      aria-label="Toggle lock"  
-                      onClick={() => toggleLock(c)} 
-                    /> 
-                  </HStack> 
-                </Td> 
-              </Tr> 
-            ))} 
-          </Tbody> 
-        </Table> 
-      </Box>
+      {/* Section B: Tabs and Companies Table */} 
+      <Tabs variant="enclosed" colorScheme="blue" index={tabIndex} onChange={setTabIndex}>
+        <TabList mb={4}>
+          <Tab fontWeight="bold">Rated Companies ({companies.filter(c => c.rating !== null).length})</Tab>
+          <Tab fontWeight="bold">Unrated Companies ({companies.filter(c => c.rating === null).length})</Tab>
+        </TabList>
+
+        <TabPanels>
+          <TabPanel p={0}>
+            {renderTable()}
+          </TabPanel>
+          <TabPanel p={0}>
+            {renderTable()}
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
 
       {/* Manual Rating Modal */}
       <Modal isOpen={isRatingOpen} onClose={onRatingClose}>
@@ -470,7 +500,7 @@ export default function CompaniesPage() {
               </FormControl>
               <Box p={3} bg="blue.50" borderRadius="md" w="full">
                 <Text fontSize="xs" color="blue.700">
-                  Manual ratings are automatically <b>locked</b> and tagged as <b>manual</b> source.
+                  Manual ratings are tagged as <b>manual</b> source.
                 </Text>
               </Box>
             </VStack>
@@ -545,6 +575,9 @@ export default function CompaniesPage() {
                 <Text fontWeight="bold" mb={2} fontSize="sm">Prompt</Text> 
                 <Select value={batchPrompt} onChange={(e) => setBatchPrompt(e.target.value)}> 
                   <option value="default">Default — Rate companies</option> 
+                  {prompts.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
                 </Select> 
               </Box> 
               <Box> 

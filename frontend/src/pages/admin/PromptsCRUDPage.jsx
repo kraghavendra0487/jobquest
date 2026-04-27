@@ -27,6 +27,7 @@ import {
   useToast, 
   Spinner, 
   IconButton, 
+  Divider,
   Flex, 
   Code 
 } from '@chakra-ui/react'; 
