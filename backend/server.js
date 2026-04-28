@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const schoolRouter = require('./routers/schoolRouter');
+const studentRouter = require('./routers/studentRouter');
 const userRouter = require('./routers/userRouter');
 const jobUploadRouter = require('./routers/jobUploadRouter');
 const aiRouter = require('./routers/aiRouter');
@@ -23,6 +24,7 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/schools', schoolRouter);
+app.use('/api/student', studentRouter);
 app.use('/api/users', userRouter);
 app.use('/api/admin/job-uploads', jobUploadRouter);
 app.use('/api/admin/ai', aiRouter);

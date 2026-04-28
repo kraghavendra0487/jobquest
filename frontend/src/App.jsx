@@ -6,12 +6,30 @@ import { useToast, Center, Spinner } from '@chakra-ui/react';
 // Pages
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
+import AdminJobsPage from './pages/AdminJobsPage';
 import DashboardPage from './pages/DashboardPage';
+import StudentDashboardPage from './pages/StudentDashboardPage';
+import StudentJobsPage from './pages/StudentJobsPage';
 import UserSchoolsPage from './pages/UserSchoolsPage';
 import JobProcessPage from './pages/JobProcessPage';
 import JobAutoPage from './pages/JobAutoPage';
 // Routes
 import { RequireAuth } from './routes/RequireAuth';
+
+function normalizeUserData(profile) {
+  if (!profile) return null;
+
+  const resolvedSchool =
+    profile.school ||
+    profile.schools?.name ||
+    profile.schools?.[0]?.name ||
+    null;
+
+  return {
+    ...profile,
+    school: resolvedSchool,
+  };
+}
 
 function App() {
   const [session, setSession] = useState(null);
@@ -38,7 +56,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("*")
+        .select("*, schools(name)")
         .eq("id", user.id)
         .single();
 
@@ -46,7 +64,7 @@ function App() {
         setIsNewUser(true);
         navigate('/onboarding');
       } else if (data) {
-        setUserData(data);
+        setUserData(normalizeUserData(data));
         setIsNewUser(false);
       }
     } catch (err) {
@@ -81,10 +99,13 @@ function App() {
   }, [checkUserInDB]);
 
   const handleOnboardingComplete = (data) => {
-    setUserData(data);
+    setUserData(normalizeUserData(data));
     setIsNewUser(false);
     navigate('/');
   };
+
+  const role = userData?.role || 'student';
+  const isAdmin = role === 'admin';
 
   if (loading) {
     return (
@@ -121,7 +142,11 @@ function App() {
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
-              <DashboardPage session={session} userData={userData} />
+              isAdmin ? (
+                <DashboardPage session={session} userData={userData} />
+              ) : (
+                <StudentDashboardPage session={session} userData={userData} />
+              )
             )}
           </RequireAuth>
         } 
@@ -134,10 +159,31 @@ function App() {
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
-              <UserSchoolsPage session={session} userData={userData} />
+              isAdmin ? (
+                <UserSchoolsPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
             )}
           </RequireAuth>
         } 
+      />
+
+      <Route
+        path="/admin-jobs"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <AdminJobsPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            )}
+          </RequireAuth>
+        }
       />
 
       <Route 
@@ -147,7 +193,11 @@ function App() {
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
-              <JobProcessPage session={session} userData={userData} />
+              isAdmin ? (
+                <JobProcessPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
             )}
           </RequireAuth>
         } 
@@ -160,10 +210,31 @@ function App() {
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
-              <JobAutoPage session={session} userData={userData} />
+              isAdmin ? (
+                <JobAutoPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
             )}
           </RequireAuth>
         } 
+      />
+
+      <Route
+        path="/jobs"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <Navigate to="/" replace />
+              ) : (
+                <StudentJobsPage session={session} userData={userData} />
+              )
+            )}
+          </RequireAuth>
+        }
       />
 
       <Route path="*" element={<Navigate to="/" replace />} />

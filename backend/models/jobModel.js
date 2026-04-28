@@ -48,6 +48,7 @@ const jobModel = {
     page = 1, 
     limit = 20, 
     search = '', 
+    school = '',
     status = '', 
     work_mode = '', 
     employment_type = '',
@@ -62,6 +63,7 @@ const jobModel = {
     const buildQuery = (selectCols) => {
       let q = supabase.from('jobs').select(selectCols, { count: 'exact' });
       if (search) q = q.or(`title.ilike.%${search}%,company.ilike.%${search}%`);
+      if (school) q = q.contains('assigned_schools', [school]);
       if (status) q = q.eq('status', status);
       if (work_mode) q = q.eq('work_mode', work_mode);
       if (employment_type) q = q.eq('employment_type', employment_type);

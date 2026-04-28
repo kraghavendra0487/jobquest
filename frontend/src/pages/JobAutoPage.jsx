@@ -9,7 +9,7 @@ import {
   LogOut, User as UserIcon, GraduationCap, Bell, LayoutDashboard, School, Activity, Cpu,
   Settings,
   Upload as UploadIcon, FileSpreadsheet, CheckCircle2, Clock, Building2, Briefcase, Search,
-  Star, RefreshCw, ArrowRight, Sparkles, Save, RotateCcw, Zap,
+  Star, RefreshCw, ArrowRight, Sparkles, Save, RotateCcw, Zap, BriefcaseBusiness,
 } from "lucide-react";
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { api, apiUpload } from '../lib/api';
 const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { name: 'Schools', icon: School, path: '/schools' },
+  { name: 'All Jobs', icon: BriefcaseBusiness, path: '/admin-jobs' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
   { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
 ];
@@ -412,7 +413,7 @@ export default function JobAutoPage({ session, userData }) {
 
       <Flex pt={16}>
         {/* Sidebar */}
-        <Box w="260px" bg="white" borderRight="1px" borderColor="gray.200" position="fixed" h="calc(100vh - 64px)" py={8} px={4} display={{ base: 'none', md: 'block' }}>
+        <Box w="260px" bg="white" borderRight="1px" borderColor="gray.200" position="fixed" zIndex="docked" h="calc(100vh - 64px)" py={8} px={4} display={{ base: 'none', md: 'block' }}>
           <VStack align="stretch" spacing={2}>
             {sidebarItems.map((item) => (
               <Button key={item.path} as={Link} to={item.path}

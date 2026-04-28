@@ -21,18 +21,27 @@ exports.upsertProfile = async (req, res) => {
       school_id,
       usn,
       school: school.name,
+      role: req.user.role || 'student',
     };
 
     if (name) updateData.name = name;
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
       .upsert(updateData)
-      .select()
+      .select('id')
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+
+    const { data: hydratedUser, error: hydrateError } = await supabase
+      .from('users')
+      .select('*, schools(name)')
+      .eq('id', userId)
+      .single();
+
+    if (hydrateError) return res.status(500).json({ error: hydrateError.message });
+    res.json(hydratedUser);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

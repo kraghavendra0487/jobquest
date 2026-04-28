@@ -34,6 +34,7 @@ import {
   LayoutDashboard,
   Activity,
   Cpu,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -41,6 +42,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { name: 'Schools', icon: School, path: '/schools' },
+  { name: 'All Jobs', icon: BriefcaseBusiness, path: '/admin-jobs' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
   { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
 ];
@@ -105,6 +107,7 @@ export default function DashboardPage({ session, userData }) {
           borderRight="1px"
           borderColor="gray.200"
           position="fixed"
+          zIndex="docked"
           h="calc(100vh - 64px)"
           py={8}
           px={4}
