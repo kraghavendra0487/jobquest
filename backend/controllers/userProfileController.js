@@ -25,12 +25,12 @@ exports.upsertProfile = async (req, res) => {
     // 3. Upsert profile
     const updateData = {
       id: userId,
+      email: req.user.email,
       school_id,
       program_id,
       usn,
-      school: school.name, // Legacy text field
-      program: program.name, // Legacy text field
-      updated_at: new Date()
+      school: school.name,
+      program: program.name,
     };
 
     if (name) updateData.name = name;

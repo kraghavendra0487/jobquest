@@ -56,6 +56,7 @@ import {
   useDisclosure,
   Textarea,
   SimpleGrid,
+  Center,
 } from '@chakra-ui/react';
 import {
   LogOut,
@@ -101,6 +102,7 @@ const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { name: 'Schools', icon: School, path: '/schools' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
+  { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
 ];
 
 function JobsBatchPanel({ uploadId, onRateOpen }) {
@@ -819,6 +821,7 @@ export default function JobProcessPage({ session, userData }) {
   const [uploadHistory, setUploadHistory] = useState([]);
   const [preprocessingBatches, setPreprocessingBatches] = useState([]);
   const [extractedCompanies, setExtractedCompanies] = useState([]);
+  const [jobsByUpload, setJobsByUpload] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch all data
@@ -832,6 +835,23 @@ export default function JobProcessPage({ session, userData }) {
       // For the Company Rating tab, we use the uploads which now include companies
       setExtractedCompanies(uploads);
       setPreprocessingBatches(uploads);
+
+      // Fetch jobs for each upload to show job rating status in Track tab
+      if (uploads.length > 0) {
+        const uploadIds = uploads.map(u => u.id);
+        const { data: jobsData, error: jobsErr } = await supabase
+          .from('jobs')
+          .select('upload_id, ai_score')
+          .in('upload_id', uploadIds);
+        if (!jobsErr && jobsData) {
+          const grouped = {};
+          uploadIds.forEach(id => { grouped[id] = []; });
+          jobsData.forEach(j => {
+            if (grouped[j.upload_id] != null) grouped[j.upload_id].push(j);
+          });
+          setJobsByUpload(grouped);
+        }
+      }
 
       // Keep selectedRatingBatch in sync with updated data
       if (selectedRatingBatch) {
@@ -1054,9 +1074,6 @@ export default function JobProcessPage({ session, userData }) {
                     <Text fontSize="xs" color="gray.500">{userData?.email}</Text>
                   </Box>
                   <Divider />
-                  {userData?.role === 'admin' && (
-                    <MenuItem as={Link} to="/admin" icon={<Icon as={Settings} />}>Admin Panel</MenuItem>
-                  )}
                   <MenuItem icon={<Icon as={UserIcon} />}>My Profile</MenuItem>
                   <MenuItem icon={<Icon as={Settings} />}>Settings</MenuItem>
                   <Divider />
@@ -1176,7 +1193,7 @@ export default function JobProcessPage({ session, userData }) {
                 </TabList>
 
                 <TabPanels mt={6}>
-                  {/* Tab 1: Track (Existing Table) */}
+                  {/* Tab 1: Track — Step-by-step Pipeline Tracker */}
                   <TabPanel p={0}>
                     <VStack align="stretch" spacing={6}>
                       {/* Controls */}
@@ -1185,8 +1202,8 @@ export default function JobProcessPage({ session, userData }) {
                           <InputLeftElement pointerEvents="none">
                             <Icon as={Search} color="gray.400" />
                           </InputLeftElement>
-                          <Input 
-                            placeholder="Search by filename or ID..." 
+                          <Input
+                            placeholder="Search by filename or ID..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             borderRadius="lg"
@@ -1196,8 +1213,8 @@ export default function JobProcessPage({ session, userData }) {
                         <HStack spacing={4} flex="1" justify={{ md: 'flex-end' }}>
                           <HStack>
                             <Icon as={Filter} size={16} color="gray.400" />
-                            <Select 
-                              value={statusFilter} 
+                            <Select
+                              value={statusFilter}
                               onChange={(e) => setStatusFilter(e.target.value)}
                               borderRadius="lg"
                               w="150px"
@@ -1211,8 +1228,8 @@ export default function JobProcessPage({ session, userData }) {
 
                           <HStack>
                             <Icon as={ArrowUpDown} size={16} color="gray.400" />
-                            <Select 
-                              value={sortOrder} 
+                            <Select
+                              value={sortOrder}
                               onChange={(e) => setSortOrder(e.target.value)}
                               borderRadius="lg"
                               w="150px"
@@ -1224,69 +1241,198 @@ export default function JobProcessPage({ session, userData }) {
                         </HStack>
                       </Flex>
 
-                      {/* Table */}
-                      <Box bg="white" borderRadius="xl" border="1px" borderColor="gray.200" shadow="sm" overflow="hidden">
-                        <Table variant="simple">
-                          <Thead bg="gray.50">
-                            <Tr>
-                              <Th>Batch Info</Th>
-                              <Th>Date</Th>
-                              <Th>Status</Th>
-                              <Th>Overall</Th>
-                              <Th textAlign="right">Action</Th>
-                            </Tr>
-                          </Thead>
-                          <Tbody>
-                            {filteredAndSortedData.map((p) => (
-                              <Tr 
-                                key={p.id} 
-                                cursor="pointer" 
-                                _hover={{ bg: 'gray.50' }}
+                      {/* Pipeline Cards */}
+                      {filteredAndSortedData.length === 0 ? (
+                        <Box py={20} textAlign="center" bg="white" borderRadius="2xl" border="2px dashed" borderColor="gray.200">
+                          <VStack spacing={3}>
+                            <Icon as={Search} boxSize={10} color="gray.300" />
+                            <Text color="gray.500">No batches match your search or filters.</Text>
+                          </VStack>
+                        </Box>
+                      ) : (
+                        <VStack align="stretch" spacing={4}>
+                          {filteredAndSortedData.map((p) => {
+                            const companies = p.companies || [];
+                            const ratedCompanies = companies.filter(c => c.rating != null);
+                            const batchJobsForTrack = jobsByUpload[p.id] || [];
+                            const ratedJobs = batchJobsForTrack.filter(j => j.ai_score != null);
+
+                            const steps = [
+                              {
+                                label: 'Upload',
+                                icon: UploadIcon,
+                                tabIdx: 1,
+                                done: !!p.created_at,
+                                detail: p.filename,
+                              },
+                              {
+                                label: 'Preprocess',
+                                icon: Cpu,
+                                tabIdx: 2,
+                                done: p.status === 'saved' || p.status === 'completed',
+                                detail: p.status === 'saved' || p.status === 'completed' ? `${p.total_rows || 0} rows processed` : 'Not started',
+                              },
+                              {
+                                label: 'Company Rating',
+                                icon: Building2,
+                                tabIdx: 3,
+                                done: companies.length > 0 && ratedCompanies.length === companies.length,
+                                detail: companies.length === 0 ? 'No companies' : `${ratedCompanies.length}/${companies.length} rated`,
+                              },
+                              {
+                                label: 'Job Rating',
+                                icon: Briefcase,
+                                tabIdx: 4,
+                                done: batchJobsForTrack.length > 0 && ratedJobs.length === batchJobsForTrack.length,
+                                detail: batchJobsForTrack.length === 0 ? 'No jobs' : `${ratedJobs.length}/${batchJobsForTrack.length} rated`,
+                              },
+                            ];
+
+                            const completedSteps = steps.filter(s => s.done).length;
+                            const allDone = completedSteps === 4;
+
+                            return (
+                              <Box
+                                key={p.id}
+                                bg="white"
+                                border="1px solid"
+                                borderColor={allDone ? 'green.200' : 'gray.200'}
+                                borderRadius="2xl"
+                                overflow="hidden"
                                 transition="all 0.2s"
+                                _hover={{ boxShadow: 'lg', borderColor: allDone ? 'green.300' : 'blue.200' }}
                               >
-                                <Td>
-                                  <HStack spacing={3}>
-                                    <Icon as={FileSpreadsheet} color="green.500" />
-                                    <VStack align="start" spacing={0}>
-                                      <Text fontWeight="bold" fontSize="sm">{p.filename}</Text>
-                                      <Text fontSize="xs" color="gray.400">{p.id}</Text>
-                                    </VStack>
+                                {/* Card Header */}
+                                <Flex
+                                  px={6}
+                                  py={4}
+                                  align="center"
+                                  justify="space-between"
+                                  borderBottom="1px solid"
+                                  borderColor="gray.100"
+                                  bg={allDone ? 'green.50' : 'gray.50'}
+                                >
+                                  <HStack spacing={4}>
+                                    <Center
+                                      w={10} h={10}
+                                      bg={allDone ? 'green.100' : 'blue.100'}
+                                      borderRadius="xl"
+                                      color={allDone ? 'green.600' : 'blue.600'}
+                                    >
+                                      <Icon as={allDone ? CheckCircle2 : FileSpreadsheet} boxSize={5} />
+                                    </Center>
+                                    <Box>
+                                      <Text fontWeight="bold" fontSize="md" color="gray.800">{p.filename}</Text>
+                                      <HStack spacing={3} fontSize="xs" color="gray.500">
+                                        <Text>{p.id}</Text>
+                                        <Text>•</Text>
+                                        <Text>{formatRelative(p.created_at || p.date)}</Text>
+                                      </HStack>
+                                    </Box>
                                   </HStack>
-                                </Td>
-                                <Td>
-                                  <Text fontSize="sm" color="gray.600">{formatRelative(p.created_at || p.date)}</Text>
-                                </Td>
-                                <Td>
-                                  <Badge colorScheme={p.status === 'completed' ? 'green' : p.status === 'failed' ? 'red' : 'yellow'} variant="subtle">
-                                    {p.status?.toUpperCase() || 'PENDING'}
-                                  </Badge>
-                                </Td>
-                                <Td>
-                                  <Progress value={p.progress || (p.status === 'completed' ? 100 : 0)} size="xs" colorScheme="blue" borderRadius="full" />
-                                </Td>
-                                <Td textAlign="right">
-                                  <IconButton
-                                    size="sm"
-                                    variant="ghost"
-                                    icon={<Icon as={Eye} />}
-                                    aria-label="View details"
+                                  <HStack spacing={3}>
+                                    <Badge
+                                      colorScheme={allDone ? 'green' : p.status === 'failed' ? 'red' : 'blue'}
+                                      variant="subtle"
+                                      px={3} py={1}
+                                      borderRadius="lg"
+                                      fontSize="xs"
+                                      fontWeight="bold"
+                                    >
+                                      {allDone ? 'COMPLETE' : (p.status || 'pending').toUpperCase()}
+                                    </Badge>
+                                    <Text fontSize="sm" fontWeight="bold" color="gray.600">
+                                      {completedSteps}/4
+                                    </Text>
+                                  </HStack>
+                                </Flex>
+
+                                {/* Steps Pipeline */}
+                                <Box px={6} py={5}>
+                                  <HStack spacing={0} align="start" w="full">
+                                    {steps.map((step, idx) => {
+                                      const StepIcon = step.icon;
+                                      return (
+                                        <React.Fragment key={step.label}>
+                                          {/* Step */}
+                                          <VStack
+                                            flex="1"
+                                            spacing={2}
+                                            cursor="pointer"
+                                            onClick={() => handleTabChange(step.tabIdx)}
+                                            transition="all 0.2s"
+                                            _hover={{ transform: 'translateY(-2px)' }}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') handleTabChange(step.tabIdx); }}
+                                          >
+                                            {/* Circle */}
+                                            <Center
+                                              w={10} h={10}
+                                              borderRadius="full"
+                                              bg={step.done ? 'green.500' : 'gray.200'}
+                                              color="white"
+                                              transition="all 0.3s"
+                                              boxShadow={step.done ? '0 0 0 3px rgba(72,187,120,0.2)' : 'none'}
+                                            >
+                                              {step.done ? (
+                                                <CheckCircle2 size={20} />
+                                              ) : (
+                                                <StepIcon size={18} color="gray.500" />
+                                              )}
+                                            </Center>
+                                            {/* Label */}
+                                            <Text
+                                              fontSize="xs"
+                                              fontWeight={step.done ? 'bold' : 'medium'}
+                                              color={step.done ? 'green.700' : 'gray.500'}
+                                              textAlign="center"
+                                            >
+                                              {step.label}
+                                            </Text>
+                                            {/* Detail */}
+                                            <Text
+                                              fontSize="2xs"
+                                              color="gray.400"
+                                              textAlign="center"
+                                              noOfLines={1}
+                                            >
+                                              {step.detail}
+                                            </Text>
+                                          </VStack>
+                                          {/* Connector line between steps */}
+                                          {idx < steps.length - 1 && (
+                                            <Box
+n                                              flex="1"
+                                              h="2px"
+                                              bg={step.done && steps[idx + 1]?.done ? 'green.400' : 'gray.200'}
+                                              mt={5}
+                                              borderRadius="full"
+                                              transition="all 0.3s"
+                                            />
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </HStack>
+                                </Box>
+
+                                {/* Overall Progress Bar */}
+                                <Box px={6} pb={5}>
+                                  <Progress
+                                    value={completedSteps * 25}
+                                    size="xs"
+                                    colorScheme={allDone ? 'green' : 'blue'}
+                                    borderRadius="full"
+                                    hasStripe={!allDone}
+                                    isAnimated={!allDone}
                                   />
-                                </Td>
-                              </Tr>
-                            ))}
-                            {filteredAndSortedData.length === 0 && (
-                              <Tr>
-                                <Td colSpan={7} textAlign="center" py={10}>
-                                  <VStack spacing={2}>
-                                    <Icon as={Search} boxSize={8} color="gray.300" />
-                                    <Text color="gray.500">No batches match your search or filters.</Text>
-                                  </VStack>
-                                </Td>
-                              </Tr>
-                            )}
-                          </Tbody>
-                        </Table>
-                      </Box>
+                                </Box>
+                              </Box>
+                            );
+                          })}
+                        </VStack>
+                      )}
                     </VStack>
                   </TabPanel>
 

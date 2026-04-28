@@ -26,9 +26,9 @@ async function requireAuth(req, res, next) {
 
     const { data: profile, error: pErr } = await supabase
       .from('users').select('id, email, role, school_id, program_id').eq('id', user.id).single();
-    if (pErr || !profile) return res.status(403).json({ error: 'No profile' });
 
-    req.user = profile;
+    // Allow requests even without a profile (e.g. during onboarding)
+    req.user = profile || { id: user.id, email: user.email };
     next();
   } catch (e) {
     console.error('[requireAuth] Error:', e.message);

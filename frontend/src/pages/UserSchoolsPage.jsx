@@ -53,6 +53,7 @@ import {
   MoreVertical,
   PenLine,
   Trash2,
+  Cpu,
 } from "lucide-react";
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -62,6 +63,7 @@ const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { name: 'Schools', icon: School, path: '/schools' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
+  { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
 ];
 
 export default function UserSchoolsPage({ session, userData }) {
@@ -244,9 +246,6 @@ export default function UserSchoolsPage({ session, userData }) {
                     <Text fontSize="xs" color="gray.500">{userData?.email}</Text>
                   </Box>
                   <Divider />
-                  {isAdmin && (
-                    <MenuItem as={Link} to="/admin" icon={<Icon as={Settings} />}>Admin Panel</MenuItem>
-                  )}
                   <MenuItem icon={<Icon as={UserIcon} />}>My Profile</MenuItem>
                   <MenuItem icon={<Icon as={Settings} />}>Settings</MenuItem>
                   <Divider />
@@ -310,9 +309,9 @@ export default function UserSchoolsPage({ session, userData }) {
                 {isAdmin && (
                   <Button
                     leftIcon={<Plus size={16} />}
-                    colorScheme="indigo"
-                    bg="indigo.600"
-                    _hover={{ bg: 'indigo.700', transform: 'translateY(-2px)' }}
+                    colorScheme="blue"
+                    bg="blue.600"
+                    _hover={{ bg: 'blue.700', transform: 'translateY(-2px)' }}
                     transition="all 0.2s"
                     px={6}
                     py={3}

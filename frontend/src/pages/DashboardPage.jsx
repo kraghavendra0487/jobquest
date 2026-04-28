@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   LayoutDashboard,
   Activity,
+  Cpu,
 } from "lucide-react";
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -41,6 +42,7 @@ const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { name: 'Schools', icon: School, path: '/schools' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
+  { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
 ];
 
 export default function DashboardPage({ session, userData }) {
@@ -82,9 +84,6 @@ export default function DashboardPage({ session, userData }) {
                     <Text fontSize="xs" color="gray.500">{userData?.email}</Text>
                   </Box>
                   <Divider />
-                  {userData?.role === 'admin' && (
-                    <MenuItem as={Link} to="/admin" icon={<Icon as={Settings} />}>Admin Panel</MenuItem>
-                  )}
                   <MenuItem icon={<Icon as={UserIcon} />}>My Profile</MenuItem>
                   <MenuItem icon={<Icon as={Settings} />}>Settings</MenuItem>
                   <Divider />
