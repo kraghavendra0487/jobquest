@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment, useCallback } from 'react';
 import {
   Box, Container, Flex, Heading, Text, Avatar, IconButton, Menu, MenuButton, MenuList, MenuItem,
   Badge, VStack, HStack, Icon, Button, Divider, Table, Thead, Tbody, Tr, Th, Td, Input, Select,
@@ -7,10 +7,9 @@ import {
 } from '@chakra-ui/react';
 import {
   LogOut, User as UserIcon, GraduationCap, Bell, LayoutDashboard, School, Activity, Cpu,
-  Settings,
-  Upload as UploadIcon, FileSpreadsheet, CheckCircle2, Clock, Building2, Briefcase, Search,
-  Star, RefreshCw, ArrowRight, Sparkles, Save, RotateCcw, Zap, BriefcaseBusiness,
-} from "lucide-react";
+  Settings, Upload as UploadIcon, FileSpreadsheet, CheckCircle2, Building2, Briefcase, Search,
+  Star, ArrowRight, Sparkles, Save, RotateCcw, Zap, BriefcaseBusiness,
+} from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { api, apiUpload } from '../lib/api';
@@ -32,14 +31,18 @@ const STEPS = [
   { key: 'results', label: 'Results', icon: CheckCircle2 },
 ];
 
+const JOB_SELECT = 'id, title, company, location, work_mode, employment_type, posted_at, posted_relative, applicant_count, description_compact, full_description, company_details, company_compact, ai_score, assigned_schools, estimated_salary_lpa, company_id, upload_id';
+
 function parseOutputToUpdates(rawOutput, jobIdMap) {
-  const lines = rawOutput.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = rawOutput.split('\n').map((l) => l.trim()).filter(Boolean);
   const updates = [];
   for (const line of lines) {
     if (/^#[,\s]/i.test(line) || /^jobid[,\s]/i.test(line) || /^company[,\s]/i.test(line)) continue;
     const parts = [];
-    let cur = '', inQuote = false, inBracket = false;
-    for (let i = 0; i < line.length; i++) {
+    let cur = '';
+    let inQuote = false;
+    let inBracket = false;
+    for (let i = 0; i < line.length; i += 1) {
       const ch = line[i];
       if (ch === '"') { inQuote = !inQuote; continue; }
       if (ch === '[') { inBracket = true; cur += ch; continue; }
@@ -57,13 +60,24 @@ function parseOutputToUpdates(rawOutput, jobIdMap) {
     if (!jobId) continue;
     let assignedSchools = [];
     try { assignedSchools = JSON.parse(schoolsRaw.replace(/'/g, '"')); }
-    catch { assignedSchools = schoolsRaw.replace(/[[]"]/g, '').split(',').map(s => s.trim()).filter(Boolean); }
-    updates.push({ jobId, ai_score: score >= 1 && score <= 10 ? score : null, assigned_schools: assignedSchools.length > 0 ? assignedSchools : null, estimated_salary_lpa: !isNaN(salary) && salary > 0 ? salary : null });
+    catch { assignedSchools = schoolsRaw.replace(/[[]"]/g, '').split(',').map((s) => s.trim()).filter(Boolean); }
+    updates.push({
+      jobId,
+      ai_score: score >= 1 && score <= 10 ? score : null,
+      assigned_schools: assignedSchools.length > 0 ? assignedSchools : null,
+      estimated_salary_lpa: !Number.isNaN(salary) && salary > 0 ? salary : null,
+    });
   }
   return updates;
 }
 
-export default function JobAutoPage({ session, userData }) {
+function renderTableValue(value) {
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '-';
+  if (value == null || value === '') return '-';
+  return String(value);
+}
+
+export default function JobQuestPage({ session, userData }) {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -75,13 +89,14 @@ export default function JobAutoPage({ session, userData }) {
   const [isLoading, setIsLoading] = useState(false);
   const [pollInterval, setPollInterval] = useState(null);
 
-  // Company rating state
+  const [rawUploadRows, setRawUploadRows] = useState([]);
+  const [previewRows, setPreviewRows] = useState([]);
+
   const [companies, setCompanies] = useState([]);
   const [companyPrompt, setCompanyPrompt] = useState('');
   const [companyOutput, setCompanyOutput] = useState('');
   const [companyRunning, setCompanyRunning] = useState(false);
 
-  // Job rating state
   const [jobs, setJobs] = useState([]);
   const [jobPrompt, setJobPrompt] = useState('');
   const [jobOutput, setJobOutput] = useState('');
@@ -90,7 +105,6 @@ export default function JobAutoPage({ session, userData }) {
   const [jobSaving, setJobSaving] = useState(false);
   const [usingAllJobs, setUsingAllJobs] = useState(false);
 
-  // Results state
   const [resultSearch, setResultSearch] = useState('');
   const [resultFilterSchool, setResultFilterSchool] = useState('');
   const [resultSort, setResultSort] = useState('ai_score_desc');
@@ -99,10 +113,9 @@ export default function JobAutoPage({ session, userData }) {
   const { isOpen: isCompanyAIOpen, onOpen: onCompanyAIOpen, onClose: onCompanyAIClose } = useDisclosure();
 
   useEffect(() => {
-    api('/api/schools').then(d => setSchoolsList(Array.isArray(d) ? d : [])).catch(() => {});
+    api('/api/schools').then((d) => setSchoolsList(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
-  // Cleanup poll on unmount
   useEffect(() => () => { if (pollInterval) clearInterval(pollInterval); }, [pollInterval]);
 
   const handleLogout = async () => {
@@ -110,13 +123,35 @@ export default function JobAutoPage({ session, userData }) {
     navigate('/login');
   };
 
+  const fetchJobsForUpload = useCallback(async (uploadId) => {
+    if (!uploadId) return [];
+    const { data, error } = await supabase.from('jobs').select(JOB_SELECT).eq('upload_id', uploadId);
+    if (error) throw error;
+    const rows = data || [];
+    setJobs(rows);
+    return rows;
+  }, []);
+
+  const loadCompaniesForUpload = useCallback(async (upload) => {
+    setIsLoading(true);
+    try {
+      const comps = (upload.companies || []).map((c) => ({ ...c, _localRating: c.rating }));
+      setCompanies(comps);
+      await fetchJobsForUpload(upload.id);
+    } catch (err) {
+      toast({ title: 'Error loading upload data', description: err.message, status: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchJobsForUpload, toast]);
+
   const handleFileSelect = () => fileInputRef.current?.click();
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     const allowedTypes = ['.xlsx', '.xls'];
-    if (!allowedTypes.some(t => file.name.toLowerCase().endsWith(t))) {
+    if (!allowedTypes.some((t) => file.name.toLowerCase().endsWith(t))) {
       toast({ title: 'Invalid file type', description: 'Please upload an Excel file.', status: 'error' });
       return;
     }
@@ -125,9 +160,17 @@ export default function JobAutoPage({ session, userData }) {
       const formData = new FormData();
       formData.append('file', file);
       const preview = await apiUpload('/api/admin/job-uploads/preview', formData);
+      setRawUploadRows(Array.isArray(preview.raw_rows) ? preview.raw_rows : []);
+      setPreviewRows(Array.isArray(preview.rows) ? preview.rows : []);
       await api(`/api/admin/job-uploads/${preview.upload_id}/save`, { method: 'POST' });
       toast({ title: 'Upload successful', description: 'Preprocessing started...', status: 'success' });
-      setCurrentUpload({ id: preview.upload_id, filename: file.name, status: 'processing', progress: 10 });
+      setCurrentUpload({
+        id: preview.upload_id,
+        filename: file.name,
+        status: 'processing',
+        progress: 10,
+        total_rows: preview.total_rows,
+      });
       setWizardStep('preprocessing');
       startPolling(preview.upload_id);
     } catch (err) {
@@ -144,9 +187,9 @@ export default function JobAutoPage({ session, userData }) {
       try {
         const data = await api('/api/admin/job-uploads');
         const uploads = Array.isArray(data) ? data : (data.uploads || []);
-        const upload = uploads.find(u => u.id === uploadId);
+        const upload = uploads.find((u) => u.id === uploadId);
         if (upload) {
-          setCurrentUpload(prev => ({ ...prev, ...upload }));
+          setCurrentUpload((prev) => ({ ...prev, ...upload }));
           if (upload.status === 'saved' || upload.status === 'completed') {
             clearInterval(interval);
             setPollInterval(null);
@@ -154,40 +197,32 @@ export default function JobAutoPage({ session, userData }) {
             loadCompaniesForUpload(upload);
           }
         }
-      } catch (_e) { /* silent poll failure */ }
+      } catch (_e) {
+        // silent poll failure
+      }
     }, 4000);
     setPollInterval(interval);
   };
 
-  const loadCompaniesForUpload = async (upload) => {
-    setIsLoading(true);
-    try {
-      // Companies are embedded in upload object
-      const comps = (upload.companies || []).map(c => ({ ...c, _localRating: c.rating }));
-      setCompanies(comps);
-    } catch (err) {
-      toast({ title: 'Error loading companies', description: err.message, status: 'error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const saveManualCompanyRating = async (companyId, rating) => {
     try {
-      const { error } = await supabase.from('companies').update({ rating, rated_by: 'manual', updated_at: new Date().toISOString() }).eq('id', companyId);
+      const { error } = await supabase
+        .from('companies')
+        .update({ rating, rated_by: 'manual', updated_at: new Date().toISOString() })
+        .eq('id', companyId);
       if (error) throw error;
-      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, rating, _localRating: rating } : c));
+      setCompanies((prev) => prev.map((c) => (c.id === companyId ? { ...c, rating, _localRating: rating } : c)));
       toast({ title: 'Rating saved', status: 'success' });
     } catch (err) {
       toast({ title: 'Save failed', description: err.message, status: 'error' });
     }
   };
 
-  const unratedCompanies = companies.filter(c => c.rating == null);
-  const ratedCount = companies.filter(c => c.rating != null).length;
+  const unratedCompanies = companies.filter((c) => c.rating == null);
+  const ratedCount = companies.filter((c) => c.rating != null).length;
 
   const openCompanyAI = () => {
-    const names = unratedCompanies.map(c => c.name).join(', ');
+    const names = unratedCompanies.map((c) => c.name).join(', ');
     setCompanyPrompt(
       `Rate the below companies on a scale of 1 to 5 based on employer quality/growth/reputation.\nUse the full range (1,2,3,4,5); do not give all companies the same score unless truly justified.\nReturn only CSV output with columns: Company,Rating\n\n${names}`
     );
@@ -205,7 +240,7 @@ export default function JobAutoPage({ session, userData }) {
       });
       const raw = data.response?.trim() || '';
       setCompanyOutput(raw);
-      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
       let saved = 0;
       for (const line of lines) {
         if (/^company[,\s]/i.test(line)) continue;
@@ -213,18 +248,20 @@ export default function JobAutoPage({ session, userData }) {
         if (parts.length >= 2) {
           const name = parts[0].trim().toLowerCase();
           const r = parseInt(parts[parts.length - 1].trim(), 10);
-          if (name && [1,2,3,4,5].includes(r)) {
-            const { error } = await supabase.from('companies').update({ rating: r, rated_by: 'ai', updated_at: new Date().toISOString() }).ilike('name', name);
-            if (!error) saved++;
+          if (name && [1, 2, 3, 4, 5].includes(r)) {
+            const { error } = await supabase
+              .from('companies')
+              .update({ rating: r, rated_by: 'ai', updated_at: new Date().toISOString() })
+              .ilike('name', name);
+            if (!error) saved += 1;
           }
         }
       }
       toast({ title: `Saved ${saved} company ratings`, status: 'success' });
-      // Refresh companies
-      const { data: refreshed } = await supabase.from('companies').select('*').in('id', companies.map(c => c.id));
+      const { data: refreshed } = await supabase.from('companies').select('*').in('id', companies.map((c) => c.id));
       if (refreshed) {
-        setCompanies(prev => prev.map(c => {
-          const updated = refreshed.find(r => r.id === c.id);
+        setCompanies((prev) => prev.map((c) => {
+          const updated = refreshed.find((r) => r.id === c.id);
           return updated ? { ...updated, _localRating: updated.rating } : c;
         }));
       }
@@ -238,25 +275,20 @@ export default function JobAutoPage({ session, userData }) {
   const proceedToJobRating = async () => {
     setIsLoading(true);
     try {
-      // Ensure schools are loaded
       let schools = schoolsList;
       if (schools.length === 0) {
         try {
           const d = await api('/api/schools');
           schools = Array.isArray(d) ? d : [];
           setSchoolsList(schools);
-      } catch (_e) { /* ignore */ }
+        } catch (_e) {
+          // ignore
+        }
       }
 
-      const { data: jobsData, error } = await supabase
-        .from('jobs')
-        .select('id, title, company, location, description_compact, full_description, ai_score, assigned_schools, estimated_salary_lpa, company_id, upload_id')
-        .eq('upload_id', currentUpload.id);
-      if (error) throw error;
-      const allJobs = jobsData || [];
-      // Filter to companies rated 4+
-      const goodCompanyIds = new Set(companies.filter(c => c.rating >= 4).map(c => c.id));
-      let filteredJobs = allJobs.filter(j => goodCompanyIds.has(j.company_id));
+      const allJobs = await fetchJobsForUpload(currentUpload.id);
+      const goodCompanyIds = new Set(companies.filter((c) => c.rating >= 4).map((c) => c.id));
+      let filteredJobs = allJobs.filter((j) => goodCompanyIds.has(j.company_id));
       let fallbackToAll = false;
       if (filteredJobs.length === 0 && allJobs.length > 0) {
         filteredJobs = allJobs;
@@ -265,11 +297,10 @@ export default function JobAutoPage({ session, userData }) {
       setJobs(filteredJobs);
       setUsingAllJobs(fallbackToAll);
 
-      // Build prompt
-      const schoolNames = schools.map(s => s.name).join(', ');
+      const schoolNames = schools.map((s) => s.name).join(', ');
       const jobCsv = filteredJobs.map((j, i) => {
         const desc = (j.description_compact || j.full_description || 'No description').replace(/\n/g, ' ').replace(/"/g, "'").slice(0, 400);
-        return (i + 1) + ',"' + (j.company || 'Unknown').replace(/"/g, "'") + '","' + (j.title || 'Untitled').replace(/"/g, "'") + '","' + desc + '"';
+        return `${i + 1},"${(j.company || 'Unknown').replace(/"/g, "'")}","${(j.title || 'Untitled').replace(/"/g, "'")}","${desc}"`;
       }).join('\n');
 
       setJobPrompt(
@@ -282,8 +313,8 @@ export default function JobAutoPage({ session, userData }) {
         '#,Company,JobTitle,OverallScore,AssignedSchool(array[string]),EstimatedSalaryLPA\n\n' +
         'Example AssignedSchool: ["School A","School B"]\n' +
         'IMPORTANT: The # column must match the row number from input exactly.\n\n' +
-        'School List: [' + schoolNames + ']\n\n' +
-        'Job Details (#,Company,JobTitle,JobDescription):\n' + jobCsv
+        `School List: [${schoolNames}]\n\n` +
+        `Job Details (#,Company,JobTitle,JobDescription):\n${jobCsv}`
       );
       setWizardStep('job-rating');
       if (fallbackToAll) {
@@ -330,15 +361,10 @@ export default function JobAutoPage({ session, userData }) {
         if (u.assigned_schools) payload.assigned_schools = u.assigned_schools;
         if (u.estimated_salary_lpa != null) payload.estimated_salary_lpa = u.estimated_salary_lpa;
         const { error } = await supabase.from('jobs').update(payload).eq('id', u.jobId);
-        if (!error) savedCount++;
+        if (!error) savedCount += 1;
       }
       toast({ title: `Saved ${savedCount}/${parsedJobUpdates.length} job ratings`, status: 'success' });
-      // Refresh all jobs for results
-      const { data: refreshedJobs } = await supabase
-        .from('jobs')
-        .select('id, title, company, location, description_compact, full_description, ai_score, assigned_schools, estimated_salary_lpa, company_id, upload_id')
-        .eq('upload_id', currentUpload.id);
-      setJobs(refreshedJobs || []);
+      await fetchJobsForUpload(currentUpload.id);
       setWizardStep('results');
     } catch (err) {
       toast({ title: 'Save failed', description: err.message, status: 'error' });
@@ -352,26 +378,43 @@ export default function JobAutoPage({ session, userData }) {
     setPollInterval(null);
     setWizardStep('upload');
     setCurrentUpload(null);
+    setRawUploadRows([]);
+    setPreviewRows([]);
     setCompanies([]);
     setJobs([]);
     setCompanyOutput('');
     setJobOutput('');
     setParsedJobUpdates([]);
     setResultSearch('');
+    setResultFilterSchool('');
   };
 
-  const currentStepIndex = STEPS.findIndex(s => s.key === wizardStep);
-  const progressPercent = ((currentStepIndex) / (STEPS.length - 1)) * 100;
+  const currentStepIndex = STEPS.findIndex((s) => s.key === wizardStep);
+  const progressPercent = (currentStepIndex / (STEPS.length - 1)) * 100;
+  const visitedSteps = useMemo(() => new Set(STEPS.slice(0, currentStepIndex + 1).map((step) => step.key)), [currentStepIndex]);
 
-  // Results filtering
+  const companyRatingByName = useMemo(() => {
+    const map = new Map();
+    companies.forEach((company) => {
+      map.set((company.name || '').toLowerCase(), company._localRating || company.rating || null);
+    });
+    return map;
+  }, [companies]);
+
+  const parsedUpdateByJobId = useMemo(() => {
+    const map = new Map();
+    parsedJobUpdates.forEach((update) => map.set(update.jobId, update));
+    return map;
+  }, [parsedJobUpdates]);
+
   const filteredResults = useMemo(() => {
     let data = [...jobs];
     if (resultSearch) {
       const q = resultSearch.toLowerCase();
-      data = data.filter(j => (j.title || '').toLowerCase().includes(q) || (j.company || '').toLowerCase().includes(q));
+      data = data.filter((j) => (j.title || '').toLowerCase().includes(q) || (j.company || '').toLowerCase().includes(q));
     }
     if (resultFilterSchool) {
-      data = data.filter(j => (j.assigned_schools || []).includes(resultFilterSchool));
+      data = data.filter((j) => (j.assigned_schools || []).includes(resultFilterSchool));
     }
     const [sortField, sortDir] = resultSort.split('_');
     data.sort((a, b) => {
@@ -384,9 +427,77 @@ export default function JobAutoPage({ session, userData }) {
     return data;
   }, [jobs, resultSearch, resultFilterSchool, resultSort]);
 
+  const rawRowKeys = useMemo(() => {
+    const keySet = new Set();
+    rawUploadRows.forEach((row) => Object.keys(row || {}).forEach((key) => keySet.add(key)));
+    return Array.from(keySet);
+  }, [rawUploadRows]);
+
+  const mergedRawRows = useMemo(() => {
+    return rawUploadRows.map((row, index) => {
+      const preview = previewRows[index] || {};
+      return {
+        row_number: index + 1,
+        ...row,
+        upload_status: preview.status || '-',
+        normalized_title: preview.title || '-',
+        normalized_company: preview.company || '-',
+        normalized_location: preview.location || '-',
+      };
+    });
+  }, [previewRows, rawUploadRows]);
+
+  const processedQuestRows = useMemo(() => {
+    const sourceRows = wizardStep === 'results' ? filteredResults : jobs;
+    return sourceRows.map((job) => {
+      const pending = parsedUpdateByJobId.get(job.id);
+      return {
+        ...job,
+        company_rating: companyRatingByName.get((job.company || '').toLowerCase()) ?? '-',
+        ai_score: pending?.ai_score ?? job.ai_score ?? '-',
+        assigned_schools: pending?.assigned_schools ?? job.assigned_schools ?? [],
+        estimated_salary_lpa: pending?.estimated_salary_lpa ?? job.estimated_salary_lpa ?? '-',
+      };
+    });
+  }, [wizardStep, filteredResults, jobs, parsedUpdateByJobId, companyRatingByName]);
+
+  const questTableColumns = useMemo(() => {
+    if ((wizardStep === 'upload' || wizardStep === 'preprocessing') && mergedRawRows.length > 0) {
+      return [
+        'row_number',
+        ...rawRowKeys,
+        'upload_status',
+        'normalized_title',
+        'normalized_company',
+        'normalized_location',
+      ];
+    }
+
+    return [
+      'title',
+      'company',
+      'location',
+      'work_mode',
+      'employment_type',
+      'posted_relative',
+      'description_compact',
+      'company_compact',
+      'company_rating',
+      'ai_score',
+      'assigned_schools',
+      'estimated_salary_lpa',
+    ];
+  }, [wizardStep, mergedRawRows.length, rawRowKeys]);
+
+  const questTableRows = useMemo(() => {
+    if ((wizardStep === 'upload' || wizardStep === 'preprocessing') && mergedRawRows.length > 0) {
+      return mergedRawRows;
+    }
+    return processedQuestRows;
+  }, [wizardStep, mergedRawRows, processedQuestRows]);
+
   return (
     <Box minH="100vh" bg="gray.50">
-      {/* Header */}
       <Box bg="white" borderBottom="1px" borderColor="gray.100" position="fixed" top={0} left={0} right={0} zIndex="sticky">
         <Container maxW="full" px={6}>
           <Flex h={16} align="center" justify="space-between">
@@ -413,49 +524,70 @@ export default function JobAutoPage({ session, userData }) {
       </Box>
 
       <Flex pt={16}>
-        {/* Sidebar */}
         <Box w="260px" bg="white" borderRight="1px" borderColor="gray.200" position="fixed" zIndex="docked" h="calc(100vh - 64px)" py={8} px={4} display={{ base: 'none', md: 'block' }}>
           <VStack align="stretch" spacing={2}>
             {sidebarItems.map((item) => (
-              <Button key={item.path} as={Link} to={item.path}
+              <Button
+                key={item.path}
+                as={Link}
+                to={item.path}
                 variant={location.pathname === item.path ? 'solid' : 'ghost'}
                 colorScheme={location.pathname === item.path ? 'blue' : 'gray'}
-                justifyContent="flex-start" leftIcon={<Icon as={item.icon} />} size="md" borderRadius="xl" fontSize="sm"
+                justifyContent="flex-start"
+                leftIcon={<Icon as={item.icon} />}
+                size="md"
+                borderRadius="xl"
+                fontSize="sm"
                 fontWeight={location.pathname === item.path ? 'bold' : 'medium'}
-                _hover={{ bg: location.pathname === item.path ? 'blue.600' : 'gray.100' }}>
+                _hover={{ bg: location.pathname === item.path ? 'blue.600' : 'gray.100' }}
+              >
                 {item.name}
               </Button>
             ))}
           </VStack>
         </Box>
 
-        {/* Main Content */}
         <Box flex="1" ml={{ base: 0, md: '260px' }} p={8}>
           <Container maxW="7xl">
             <VStack align="stretch" spacing={6}>
               <Flex justify="space-between" align="center">
                 <Box>
-                  <Heading size="lg">Job Auto Wizard</Heading>
-                  <Text color="gray.500">Upload, preprocess, rate companies, rate jobs — all in one flow</Text>
+                  <Heading size="lg">JOB QUEST Wizard</Heading>
+                  <Text color="gray.500">One evolving table for upload, preprocess, company rating, job scoring, and school assignment.</Text>
                 </Box>
                 {wizardStep !== 'upload' && (
                   <Button leftIcon={<RotateCcw size={16} />} variant="outline" onClick={resetWizard}>Start New</Button>
                 )}
               </Flex>
 
-              {/* Step Indicators */}
               <Card bg="white" borderRadius="2xl" shadow="sm" border="1px" borderColor="gray.200">
                 <CardBody>
                   <VStack spacing={3}>
                     <HStack spacing={0} w="full" justify="space-between">
                       {STEPS.map((step, idx) => (
                         <Fragment key={step.key}>
-                          <VStack spacing={1} flex={1} align="center">
-                            <Center w={8} h={8} borderRadius="full" bg={idx <= currentStepIndex ? 'blue.500' : 'gray.200'} color="white" fontSize="xs" fontWeight="bold">
-                              {idx < currentStepIndex ? <CheckCircle2 size={16} /> : idx + 1}
-                            </Center>
-                            <Text fontSize="xs" fontWeight={idx === currentStepIndex ? 'bold' : 'medium'} color={idx === currentStepIndex ? 'blue.600' : 'gray.400'}>{step.label}</Text>
-                          </VStack>
+                          <Button
+                            onClick={() => setWizardStep(step.key)}
+                            variant="ghost"
+                            h="auto"
+                            minW="auto"
+                            px={2}
+                            py={1}
+                            flex={1}
+                            borderRadius="xl"
+                            _hover={{ bg: 'blue.50' }}
+                            _active={{ bg: 'blue.100' }}
+                            aria-label={`Go to ${step.label}`}
+                          >
+                            <VStack spacing={1} align="center" w="full">
+                              <Center w={8} h={8} borderRadius="full" bg={idx <= currentStepIndex ? 'blue.500' : visitedSteps.has(step.key) ? 'blue.300' : 'gray.200'} color="white" fontSize="xs" fontWeight="bold">
+                                {idx < currentStepIndex ? <CheckCircle2 size={16} /> : idx + 1}
+                              </Center>
+                              <Text fontSize="xs" fontWeight={idx === currentStepIndex ? 'bold' : 'medium'} color={idx === currentStepIndex ? 'blue.600' : 'gray.400'} whiteSpace="normal" textAlign="center">
+                                {step.label}
+                              </Text>
+                            </VStack>
+                          </Button>
                           {idx < STEPS.length - 1 && (
                             <Box flex={1} h="2px" bg={idx < currentStepIndex ? 'blue.400' : 'gray.200'} mt={4} mx={2} borderRadius="full" />
                           )}
@@ -467,7 +599,6 @@ export default function JobAutoPage({ session, userData }) {
                 </CardBody>
               </Card>
 
-              {/* Upload Section */}
               {wizardStep === 'upload' && (
                 <Box bg="white" p={10} borderRadius="2xl" border="2px dashed" borderColor="blue.300" textAlign="center" shadow="sm">
                   <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} accept=".xlsx,.xls" />
@@ -475,7 +606,7 @@ export default function JobAutoPage({ session, userData }) {
                     <Box p={4} bg="blue.50" borderRadius="full"><Icon as={isUploading ? Spinner : UploadIcon} boxSize={10} color="blue.500" /></Box>
                     <VStack spacing={2}>
                       <Heading size="md">{isUploading ? 'Processing...' : 'Upload Excel File'}</Heading>
-                      <Text color="gray.500">Drag and drop or select your LinkedIn export</Text>
+                      <Text color="gray.500">After upload, the full Excel columns will appear in the Quest Table below.</Text>
                     </VStack>
                     <Button colorScheme="blue" size="lg" borderRadius="xl" onClick={handleFileSelect} isLoading={isUploading} loadingText="Uploading" leftIcon={!isUploading && <Icon as={UploadIcon} />}>
                       Select File
@@ -487,7 +618,6 @@ export default function JobAutoPage({ session, userData }) {
                 </Box>
               )}
 
-              {/* Preprocessing Section */}
               {wizardStep === 'preprocessing' && currentUpload && (
                 <Card bg="white" borderRadius="2xl" shadow="sm" border="1px" borderColor="gray.200">
                   <CardBody>
@@ -496,21 +626,19 @@ export default function JobAutoPage({ session, userData }) {
                         <Icon as={Cpu} boxSize={8} color="blue.500" />
                         <Box flex={1}>
                           <Text fontWeight="bold">{currentUpload.filename}</Text>
-                          <Text fontSize="sm" color="gray.500">Preprocessing in progress...</Text>
+                          <Text fontSize="sm" color="gray.500">Raw sheet columns are visible below while preprocessing runs.</Text>
                         </Box>
                         <Spinner color="blue.500" />
                       </HStack>
                       <Progress value={currentUpload.progress || 30} size="sm" colorScheme="blue" borderRadius="full" isAnimated hasStripe />
-                      <Text fontSize="xs" color="gray.400">Extracting companies and cleaning data. This may take a moment.</Text>
                     </VStack>
                   </CardBody>
                 </Card>
               )}
 
-              {/* Company Rating Section */}
               {wizardStep === 'company-rating' && (
                 <VStack align="stretch" spacing={4}>
-                  <Flex justify="space-between" align="center">
+                  <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
                     <HStack spacing={3}>
                       <Icon as={Building2} color="orange.500" />
                       <Text fontWeight="bold" fontSize="lg">Company Rating</Text>
@@ -527,58 +655,10 @@ export default function JobAutoPage({ session, userData }) {
                       </Button>
                     </HStack>
                   </Flex>
-
-                  {isLoading ? (
-                    <Center py={10}><Spinner color="blue.500" /></Center>
-                  ) : companies.length === 0 ? (
-                    <Text color="gray.500" textAlign="center" py={10}>No companies found.</Text>
-                  ) : (
-                    <Box bg="white" borderRadius="xl" border="1px" borderColor="gray.200" overflow="hidden" shadow="sm">
-                      <Table variant="simple" size="sm">
-                        <Thead bg="gray.50">
-                          <Tr><Th>Company</Th><Th>Domain</Th><Th>Rating</Th><Th>Action</Th></Tr>
-                        </Thead>
-                        <Tbody>
-                          {companies.map((c) => (
-                            <Tr key={c.id} _hover={{ bg: 'gray.50' }}>
-                              <Td fontWeight="semibold">{c.name}</Td>
-                              <Td fontSize="sm" color="gray.500">{c.domain || '-'}</Td>
-                              <Td>
-                                <HStack spacing={1}>
-                                  {[1,2,3,4,5].map(star => (
-                                    <IconButton key={star} size="xs" variant="ghost"
-                                      icon={<Star size={14} style={{ color: (c._localRating || c.rating || 0) >= star ? '#ED8936' : '#CBD5E0', fill: (c._localRating || c.rating || 0) >= star ? '#ED8936' : 'none' }} />}
-                                      aria-label={`Rate ${star}`}
-                                      onClick={() => saveManualCompanyRating(c.id, star)}
-                                    />
-                                  ))}
-                                  <Text fontSize="xs" fontWeight="bold" ml={2} color="orange.600">{c.rating || '-'}</Text>
-                                </HStack>
-                              </Td>
-                              <Td>
-                                <Select size="xs" w="80px" value={c._localRating || c.rating || ''}
-                                  onChange={(e) => { const val = parseInt(e.target.value); setCompanies(prev => prev.map(x => x.id === c.id ? { ...x, _localRating: val } : x)); }}>
-                                  <option value="">Rate</option>
-                                  <option value="1">1</option>
-                                  <option value="2">2</option>
-                                  <option value="3">3</option>
-                                  <option value="4">4</option>
-                                  <option value="5">5</option>
-                                </Select>
-                                <Button size="xs" ml={2} colorScheme="blue" onClick={() => saveManualCompanyRating(c.id, c._localRating || c.rating)} isDisabled={!(c._localRating || c.rating)}>
-                                  Save
-                                </Button>
-                              </Td>
-                            </Tr>
-                          ))}
-                        </Tbody>
-                      </Table>
-                    </Box>
-                  )}
+                  <Text fontSize="sm" color="gray.500">The Quest Table below is now showing the preprocessed jobs, and it will start reflecting company ratings as you rate them.</Text>
                 </VStack>
               )}
 
-              {/* Job Rating Section */}
               {wizardStep === 'job-rating' && (
                 <VStack align="stretch" spacing={4}>
                   <Flex justify="space-between" align="center">
@@ -610,17 +690,17 @@ export default function JobAutoPage({ session, userData }) {
                       </Flex>
                     </Box>
                   )}
+                  <Text fontSize="sm" color="gray.500">Pending AI scores and school assignments are reflected in the Quest Table immediately after parsing.</Text>
                 </VStack>
               )}
 
-              {/* Results Section */}
               {wizardStep === 'results' && (
                 <VStack align="stretch" spacing={4}>
                   <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
                     <HStack spacing={3}>
                       <Icon as={CheckCircle2} color="green.500" />
-                      <Text fontWeight="bold" fontSize="lg">Results Preview</Text>
-                      <Badge colorScheme="green" variant="subtle" borderRadius="full">{filteredResults.length} jobs</Badge>
+                      <Text fontWeight="bold" fontSize="lg">Results</Text>
+                      <Badge colorScheme="green" variant="subtle" borderRadius="full">{filteredResults.length} rows</Badge>
                     </HStack>
                     <HStack spacing={3}>
                       <InputGroup maxW="250px" size="sm">
@@ -629,7 +709,7 @@ export default function JobAutoPage({ session, userData }) {
                       </InputGroup>
                       <Select size="sm" w="160px" value={resultFilterSchool} onChange={(e) => setResultFilterSchool(e.target.value)} borderRadius="lg">
                         <option value="">All Schools</option>
-                        {schoolsList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                        {schoolsList.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
                       </Select>
                       <Select size="sm" w="160px" value={resultSort} onChange={(e) => setResultSort(e.target.value)} borderRadius="lg">
                         <option value="ai_score_desc">Score: High to Low</option>
@@ -639,52 +719,59 @@ export default function JobAutoPage({ session, userData }) {
                       </Select>
                     </HStack>
                   </Flex>
-
-                  <Box bg="white" borderRadius="xl" border="1px" borderColor="gray.200" overflow="hidden" shadow="sm">
-                    <Table variant="simple" size="sm">
-                      <Thead bg="gray.50">
-                        <Tr>
-                          <Th>Job Title</Th>
-                          <Th>Company</Th>
-                          <Th>AI Score</Th>
-                          <Th>Schools</Th>
-                          <Th>Salary (LPA)</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {filteredResults.map(j => (
-                          <Tr key={j.id} _hover={{ bg: 'gray.50' }}>
-                            <Td fontWeight="semibold" maxW="300px" isTruncated>{j.title}</Td>
-                            <Td color="gray.600">{j.company}</Td>
-                            <Td>
-                              <Badge colorScheme={j.ai_score >= 7 ? 'green' : j.ai_score >= 4 ? 'blue' : 'gray'} variant="subtle" borderRadius="full">
-                                {j.ai_score || '-'}
-                              </Badge>
-                            </Td>
-                            <Td>
-                              <HStack spacing={1} wrap="wrap">
-                                {(j.assigned_schools || []).map(s => (
-                                  <Badge key={s} size="xs" colorScheme="teal" variant="outline" borderRadius="md">{s}</Badge>
-                                ))}
-                              </HStack>
-                            </Td>
-                            <Td fontWeight="medium" color="green.600">{j.estimated_salary_lpa || '-'}</Td>
-                          </Tr>
-                        ))}
-                        {filteredResults.length === 0 && (
-                          <Tr><Td colSpan={5} textAlign="center" py={10} color="gray.500">No results match your filters.</Td></Tr>
-                        )}
-                      </Tbody>
-                    </Table>
-                  </Box>
+                  <Text fontSize="sm" color="gray.500">The Quest Table below is your final rated and school-assigned jobs table.</Text>
                 </VStack>
+              )}
+
+              {questTableRows.length > 0 && (
+                <Card bg="white" borderRadius="2xl" shadow="sm" border="1px" borderColor="gray.200">
+                  <CardBody>
+                    <VStack align="stretch" spacing={4}>
+                      <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+                        <Box>
+                          <Heading size="md">Quest Table</Heading>
+                          <Text fontSize="sm" color="gray.500">
+                            {wizardStep === 'upload' || wizardStep === 'preprocessing'
+                              ? 'Raw Excel rows plus normalization status.'
+                              : 'Preprocessed jobs, company ratings, AI job scores, and assigned schools in one table.'}
+                          </Text>
+                        </Box>
+                        <Badge colorScheme="blue" variant="subtle" borderRadius="full">{questTableRows.length} rows</Badge>
+                      </Flex>
+
+                      <Box overflow="auto" maxH="70vh" border="1px solid" borderColor="gray.100" borderRadius="xl">
+                        <Table variant="simple" size="sm">
+                          <Thead bg="gray.50" position="sticky" top={0} zIndex={1}>
+                            <Tr>
+                              {questTableColumns.map((column) => (
+                                <Th key={column} whiteSpace="nowrap">{column.replace(/_/g, ' ')}</Th>
+                              ))}
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {questTableRows.map((row, index) => (
+                              <Tr key={row.id || row.linkedin_job_id || row.row_number || index} _hover={{ bg: 'gray.50' }}>
+                                {questTableColumns.map((column) => (
+                                  <Td key={`${row.id || index}-${column}`} maxW={column.includes('description') || column.includes('compact') ? '320px' : '220px'}>
+                                    <Text fontSize="xs" whiteSpace="pre-wrap" noOfLines={column.includes('description') || column.includes('compact') ? 4 : undefined}>
+                                      {renderTableValue(row[column])}
+                                    </Text>
+                                  </Td>
+                                ))}
+                              </Tr>
+                            ))}
+                          </Tbody>
+                        </Table>
+                      </Box>
+                    </VStack>
+                  </CardBody>
+                </Card>
               )}
             </VStack>
           </Container>
         </Box>
       </Flex>
 
-      {/* Company AI Modal */}
       <Modal isOpen={isCompanyAIOpen} onClose={onCompanyAIClose} size="xl" isCentered>
         <ModalOverlay />
         <ModalContent borderRadius="2xl">

@@ -127,6 +127,7 @@ const jobUploadController = {
         total_rows,
         fetched_at,
         fetched_at_source,
+        raw_rows: rawRows,
         summary: {
           new: newJobsCount,
           duplicate_in_db: duplicateInDbCount,

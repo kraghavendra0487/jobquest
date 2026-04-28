@@ -57,6 +57,7 @@ const sidebarItems = [
   { name: 'All Jobs', icon: BriefcaseBusiness, path: '/admin-jobs' },
   { name: 'Job Process', icon: Activity, path: '/job-process' },
   { name: 'Job Auto', icon: Cpu, path: '/job-auto' },
+  { name: 'JOB QUEST', icon: Cpu, path: '/job-quest' },
 ];
 
 export default function UserSchoolsPage({ session, userData }) {

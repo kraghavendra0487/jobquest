@@ -13,6 +13,7 @@ import StudentJobsPage from './pages/StudentJobsPage';
 import UserSchoolsPage from './pages/UserSchoolsPage';
 import JobProcessPage from './pages/JobProcessPage';
 import JobAutoPage from './pages/JobAutoPage';
+import JobQuestPage from './pages/JobQuestPage';
 // Routes
 import { RequireAuth } from './routes/RequireAuth';
 
@@ -218,6 +219,23 @@ function App() {
             )}
           </RequireAuth>
         } 
+      />
+
+      <Route
+        path="/job-quest"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <JobQuestPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            )}
+          </RequireAuth>
+        }
       />
 
       <Route
