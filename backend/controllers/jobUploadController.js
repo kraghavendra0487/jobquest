@@ -293,6 +293,92 @@ const jobUploadController = {
   },
 
   /**
+   * DELETE /api/admin/job-uploads/:upload_id
+   * Deletes one upload and all extracted data derived from that Excel sheet.
+   */
+  async deleteUpload(req, res) {
+    const { upload_id } = req.params;
+
+    try {
+      const { data: jobsForUpload, error: jobsErr } = await supabase
+        .from('jobs')
+        .select('id, company_id')
+        .eq('upload_id', upload_id);
+
+      if (jobsErr) throw jobsErr;
+
+      const jobIds = (jobsForUpload || []).map((job) => job.id);
+      const companyIds = [...new Set((jobsForUpload || []).map((job) => job.company_id).filter(Boolean))];
+
+      try {
+        const { error: rawErr } = await supabase
+          .from('raw_jobs')
+          .delete()
+          .eq('upload_id', upload_id);
+        if (rawErr) console.error('[deleteUpload] raw_jobs delete failed:', rawErr.message);
+      } catch (err) {
+        console.error('[deleteUpload] raw_jobs delete exception:', err.message);
+      }
+
+      const { error: aiUsageErr } = await supabase
+        .from('ai_usage_log')
+        .delete()
+        .eq('upload_id', upload_id);
+      if (aiUsageErr) throw aiUsageErr;
+
+      const { error: aiBatchErr } = await supabase
+        .from('ai_batches')
+        .delete()
+        .eq('upload_id', upload_id);
+      if (aiBatchErr) throw aiBatchErr;
+
+      if (jobIds.length > 0) {
+        const { error: jobsDeleteErr } = await supabase
+          .from('jobs')
+          .delete()
+          .in('id', jobIds);
+        if (jobsDeleteErr) throw jobsDeleteErr;
+      }
+
+      const { error: uploadDeleteErr } = await supabase
+        .from('job_uploads')
+        .delete()
+        .eq('id', upload_id);
+      if (uploadDeleteErr) throw uploadDeleteErr;
+
+      uploadCache.delete(upload_id);
+
+      if (companyIds.length > 0) {
+        const { data: remainingJobs, error: remainingJobsErr } = await supabase
+          .from('jobs')
+          .select('company_id')
+          .in('company_id', companyIds);
+        if (remainingJobsErr) throw remainingJobsErr;
+
+        const stillUsedCompanyIds = new Set((remainingJobs || []).map((job) => job.company_id).filter(Boolean));
+        const orphanCompanyIds = companyIds.filter((id) => !stillUsedCompanyIds.has(id));
+
+        if (orphanCompanyIds.length > 0) {
+          const { error: companyDeleteErr } = await supabase
+            .from('companies')
+            .delete()
+            .in('id', orphanCompanyIds);
+          if (companyDeleteErr) throw companyDeleteErr;
+        }
+      }
+
+      res.json({
+        status: 'success',
+        upload_id,
+        deleted_jobs: jobIds.length,
+      });
+    } catch (err) {
+      console.error('[Delete Upload Error]', err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+
+  /**
    * DELETE /api/admin/job-uploads/purge-all
    * DANGEROUS: Deletes all uploads, jobs, companies, and raw data.
    */

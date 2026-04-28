@@ -919,6 +919,38 @@ export default function JobProcessPage({ session, userData }) {
     }
   };
 
+  const handleDeleteUpload = async (upload) => {
+    if (!window.confirm(`Delete "${upload.filename}" and all data extracted from this Excel sheet? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await api(`/api/admin/job-uploads/${upload.id}`, { method: 'DELETE' });
+      toast({
+        title: 'Upload deleted',
+        description: 'The upload and all extracted data tied to it were removed.',
+        status: 'success',
+      });
+
+      if (selectedRatingBatch?.id === upload.id) setSelectedRatingBatch(null);
+      if (selectedJobBatch?.id === upload.id) {
+        setSelectedJobBatch(null);
+        setBatchJobs([]);
+      }
+
+      fetchData();
+    } catch (err) {
+      toast({
+        title: 'Delete failed',
+        description: err.message,
+        status: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const [expandedBatch, setExpandedBatch] = useState(null);
   const [selectedRatingBatch, setSelectedRatingBatch] = useState(null);
@@ -1566,17 +1598,31 @@ n                                              flex="1"
                                     </Badge>
                                   </Td>
                                   <Td textAlign="right" pr={0}>
-                                    <Button
-                                      size="xs"
-                                      colorScheme="blue"
-                                      leftIcon={<Icon as={Cpu} size={12} />}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleTabChange(2); // Go to Preprocessing tab
-                                      }}
-                                    >
-                                      Preprocess
-                                    </Button>
+                                    <HStack spacing={2} justify="flex-end">
+                                      <Button
+                                        size="xs"
+                                        colorScheme="blue"
+                                        leftIcon={<Icon as={Cpu} size={12} />}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleTabChange(2); // Go to Preprocessing tab
+                                        }}
+                                      >
+                                        Preprocess
+                                      </Button>
+                                      <Button
+                                        size="xs"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        leftIcon={<Icon as={Trash2} size={12} />}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteUpload(item);
+                                        }}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </HStack>
                                   </Td>
                                 </Tr>
                               ))}
@@ -1655,6 +1701,16 @@ n                                              flex="1"
                                     onClick={() => handleStartPreprocessing(batch.id)}
                                   >
                                     {batch.status === 'completed' ? 'Process Again' : 'Start Processing'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    colorScheme="red"
+                                    variant="outline"
+                                    leftIcon={<Icon as={Trash2} size={14} />}
+                                    isDisabled={batch.status === 'processing'}
+                                    onClick={() => handleDeleteUpload(batch)}
+                                  >
+                                    Delete
                                   </Button>
                                 </HStack>
                               </Td>

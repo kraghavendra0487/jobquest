@@ -1,37 +1,28 @@
 const LINKED_IN_ID_RE = /\/jobs\/view\/(\d+)/;
 
-// ───────────────────────── helpers ─────────────────────────
-
-// Strip commas from text fields (to avoid CSV/delimiter issues)
+// helpers
 function stripCommas(s) {
   if (!s) return s;
   return String(s).replace(/,/g, '').trim();
 }
 
-// Replace commas with semicolons for display fields (descriptions, etc.)
 function commasToSemicolons(s) {
   if (!s) return s;
   return String(s).replace(/,/g, ';').trim();
 }
 
-// Strip trailing "(On-site)" / "(Hybrid)" / "(Remote)" from location.
-// "Bengaluru North, Karnataka, India (On-site)" -> "Bengaluru North, Karnataka, India"
 function cleanLocation(s = '') {
   if (!s) return '';
   return stripCommas(String(s).replace(/\s*\(([^)]+)\)\s*$/, '').replace(/\s+/g, ' ').trim());
 }
 
-// Title cleanup: "X\nX with verification" or "X — X with verification" -> "X"
 function cleanTitle(s = '') {
   if (!s) return '';
   let t = String(s);
-  // collapse "X — X with verification" / "X – X with verification" / "X-X with verification"
-  t = t.replace(/\s*[—–-]\s*.+?\s+with\s+verification\s*$/i, '');
-  // collapse "X\nX" duplication (\n-separated repeats)
-  const parts = t.split('\n').map(p => p.trim()).filter(Boolean);
+  t = t.replace(/\s*[â€”â€“-]\s*.+?\s+with\s+verification\s*$/i, '');
+  const parts = t.split('\n').map((p) => p.trim()).filter(Boolean);
   const dedup = parts.filter((p, i) => i === 0 || p !== parts[i - 1]);
   t = dedup.join(' ');
-  // collapse "X X" if literal duplicate
   const half = Math.floor(t.length / 2);
   if (t.length > 20 && t.slice(0, half).trim() === t.slice(-half).trim()) {
     t = t.slice(0, half).trim();
@@ -39,15 +30,13 @@ function cleanTitle(s = '') {
   return stripCommas(t.replace(/\s+/g, ' ').trim());
 }
 
-// "On-site | Full-time" -> { work_mode: "On-site", employment_type: "Full-time" }
 function splitJobType(s = '') {
   if (!s) return { work_mode: null, employment_type: null };
-  const [a, b] = String(s).split('|').map(x => x.trim());
+  const [a, b] = String(s).split('|').map((x) => x.trim());
   return { work_mode: a || null, employment_type: b || null };
 }
 
-// ─────────────────── meta_info parsing ───────────────────
-
+// meta_info parsing
 const POSTED_RE = /(?:Reposted\s+)?(\d+|an?|a\s+few)\s+(minute|hour|day|week|month|year)s?\s+ago/i;
 const APPLICANT_RE = /(?:(\d+)|Over\s+(\d+))\s+(?:applicants|people\s+clicked\s+apply|applicant)/i;
 
@@ -60,11 +49,11 @@ function parsePostedRelative(text) {
   const unit = m[2].toLowerCase();
   const unitMs = {
     minute: 60_000,
-    hour:   3_600_000,
-    day:    86_400_000,
-    week:   7 * 86_400_000,
-    month:  30 * 86_400_000,
-    year:   365 * 86_400_000,
+    hour: 3_600_000,
+    day: 86_400_000,
+    week: 7 * 86_400_000,
+    month: 30 * 86_400_000,
+    year: 365 * 86_400_000,
   }[unit];
   return { posted_relative: m[0].trim(), offset_ms: n * unitMs, is_reposted: isReposted };
 }
@@ -77,30 +66,28 @@ function parseApplicantSignal(text) {
 }
 
 function parseMeta(metaInfo, fetchedAtIso) {
-  if (!metaInfo) return {
-    posted_relative: null, posted_at: null, applicant_signal: null,
-    applicant_count: null, response_signal: null, is_promoted: false, is_reposted: false,
-  };
-
-  // The string is dot-separated on line 1, then a \n, then a free-form line 2.
-  // Example: "Bengaluru, Karnataka, India · 18 hours ago · 19 applicants\nNo response insights available yet"
-  // Example: "Bengaluru, Karnataka, India · Reposted 19 hours ago · 39 applicants\nPromoted by hirer · Responses managed off LinkedIn"
-  const [line1 = '', line2 = ''] = String(metaInfo).split('\n');
-  const parts = line1.split('·').map(p => p.trim());
-
-  const { posted_relative, offset_ms, is_reposted } = parsePostedRelative(line1);
-  const { applicant_signal, applicant_count } = parseApplicantSignal(line1);
-
-  // Promotion detection appears in line2 ("Promoted by hirer · ...") or as a separate "Promoted" tag in extra_info.
-  const is_promoted = /promoted/i.test(metaInfo);
-
-  // response_signal = whatever is on line2, minus any "Promoted by hirer · " prefix
-  let response_signal = line2.trim() || null;
-  if (response_signal) {
-    response_signal = response_signal.replace(/^Promoted\s+by\s+hirer\s*·\s*/i, '').trim() || null;
+  if (!metaInfo) {
+    return {
+      posted_relative: null,
+      posted_at: null,
+      applicant_signal: null,
+      applicant_count: null,
+      response_signal: null,
+      is_promoted: false,
+      is_reposted: false,
+    };
   }
 
-  // Compute posted_at from fetched_at
+  const [line1 = '', line2 = ''] = String(metaInfo).split('\n');
+  const { posted_relative, offset_ms, is_reposted } = parsePostedRelative(line1);
+  const { applicant_signal, applicant_count } = parseApplicantSignal(line1);
+  const is_promoted = /promoted/i.test(metaInfo);
+
+  let response_signal = line2.trim() || null;
+  if (response_signal) {
+    response_signal = response_signal.replace(/^Promoted\s+by\s+hirer\s*Â·\s*/i, '').trim() || null;
+  }
+
   let posted_at = null;
   if (fetchedAtIso && offset_ms != null) {
     posted_at = new Date(new Date(fetchedAtIso).getTime() - offset_ms).toISOString();
@@ -109,74 +96,139 @@ function parseMeta(metaInfo, fetchedAtIso) {
   return { posted_relative, posted_at, applicant_signal, applicant_count, response_signal, is_promoted, is_reposted };
 }
 
-// ─────────────────── JD compression ───────────────────
+// JD compression
+const JD_SECTION_HEADER_RE = /^(?:what\s+you.{0,3}ll\s+do|responsibilities|key\s+responsibilities|role\s+responsibilities|what\s+we.{0,3}re\s+looking\s+for|what\s+were\s+looking\s+for|requirements|required\s+skills|required\s+qualifications|qualifications|preferred|preferred\s+qualifications|must\s+have|nice\s+to\s+have|skills|experience|eligibility|education|bonus\s+points):?$/i;
 
-const STOPWORDS = new Set(`the a an is are was were be been being to of in on at for with by from as and or but if then so that this these those it its they them we us our your you i he she his her their there which who whom whose what when where why how all any each every some most more less very just only also too`.split(/\s+/));
+const JD_IGNORE_HEADER_RE = /^(?:about\s+the\s+job|about\s+the\s+role|about\s+us|who\s+we\s+are|the\s+role|why\s+join\s+us|what\s+you.{0,3}ll\s+gain|benefits|perks|company\s+overview|role\s+overview):?$/i;
 
-const ADJECTIVES = new Set(`strong excellent good great large high relevant ideal dynamic motivated passionate skilled fast efficient cutting-edge innovative best top exceptional outstanding unique amazing awesome beautiful proven leading premier comprehensive robust scalable seamless world-class new young senior junior latest modern advanced basic simple complex hard easy difficult important critical key essential primary main major minor multiple various several different similar same`.split(/\s+/));
+function normalizeCompactSource(text) {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/[Â·•●]/g, ' • ')
+    .replace(/[â€”â€“]/g, ' - ')
+    .replace(/\u2026/g, ' ')
+    .replace(/\t/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
-// Section headers we want to capture content from
-const KEEP_HEADER_RE = /\b(responsibilit|qualification|require|skill|what\s+you.?ll\s+do|key\s+responsibilit|preferred|must\s+have|nice\s+to\s+have|eligibilit|education|experience|day-to-day|day\s+to\s+day)/i;
+function normalizeBulletText(text) {
+  return text
+    .replace(/^[•*\-–—]+\s*/, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim()
+    .replace(/[.;:,]+$/, '')
+    .replace(/^[-:]+/, '')
+    .trim();
+}
 
-// Section openers we want to skip (fluff / company-marketing)
-const FLUFF_OPENER_RE = /^(?:about\s+(?:the\s+)?(?:job|company|role|us|team)|why\s+(?:this|join|us)|we\s+(?:are|believe|offer|aim|provide)|our\s+(?:mission|story|approach|goal|vision)|join\s+us|introduction|company\s+(?:description|overview)|role\s+(?:description|overview)|what\s+(?:we|you).?ll\s+(?:offer|gain|get)|perks|benefits)\b/i;
+function splitIntoCandidateLines(text) {
+  const withHeaderBreaks = text.replace(
+    /\b(About the job|About the role|About us|Who We Are|The Role|What You.{0,3}ll Do|What We.{0,3}re Looking For|What Were Looking For|Responsibilities|Key Responsibilities|Requirements|Qualifications|Preferred Qualifications|Preferred|Must Have|Nice to Have|Skills|Experience|Eligibility|Education|Bonus Points|What You.{0,3}ll Gain|Benefits|Perks)\b\s*:?/gi,
+    '\n$1:\n'
+  );
+
+  return withHeaderBreaks
+    .split(/\n+/)
+    .flatMap((line) => line.split(/\s{2,}/))
+    .flatMap((line) => line.split(/\s+[•●]\s+/))
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function lineToBullets(line) {
+  if (!line) return [];
+
+  const cleaned = line.replace(/\s+/g, ' ').trim();
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+    .map((part) => normalizeBulletText(part))
+    .filter(Boolean);
+
+  if (sentences.length >= 2) return sentences;
+
+  if (cleaned.length > 140) {
+    const starterSplit = cleaned
+      .split(/(?=\b(?:Create|Design|Develop|Collaborate|Contribute|Manage|Lead|Build|Write|Test|Deploy|Support|Analyze|Drive|Communicate|A student|A portfolio|Good|Strong|Openness|Curiosity|Preferred|Motion|Exposure|Please ensure)\b)/)
+      .map((part) => normalizeBulletText(part))
+      .filter(Boolean);
+
+    if (starterSplit.length >= 2) return starterSplit;
+  }
+
+  return cleaned
+    .split(/\s{2,}|(?<=\b(?:and|or))\s+(?=[A-Z][a-z])/)
+    .map((part) => normalizeBulletText(part))
+    .filter(Boolean);
+}
+
+function isUsefulBullet(text) {
+  if (!text) return false;
+  if (text.length < 18 || text.length > 220) return false;
+  if (/^(apply|click|learn more|show more|about the job|about us|the role)$/i.test(text)) return false;
+  return text.split(/\s+/).length >= 4;
+}
 
 function compressJD(text, { maxBullets = 12 } = {}) {
   if (!text) return null;
-  const cleaned = String(text).replace(/\s+/g, ' ').trim();
-  // Sentence split — keep the period, split on cap-letter sentence boundaries.
-  const sentences = cleaned.split(/(?<=[.!?])\s+(?=[A-Z])/);
 
+  const lines = splitIntoCandidateLines(normalizeCompactSource(text));
   const bullets = [];
-  let capture = false;
+  const seen = new Set();
+  let activeSection = null;
 
-  for (const raw of sentences) {
-    const s = raw.trim();
-    if (!s) continue;
+  for (const line of lines) {
+    const compact = line.replace(/\s+/g, ' ').trim();
 
-    // Toggle capture mode on section headings
-    if (KEEP_HEADER_RE.test(s.slice(0, 80))) { capture = true; continue; }
-    if (FLUFF_OPENER_RE.test(s)) { capture = false; continue; }
+    if (JD_SECTION_HEADER_RE.test(compact)) {
+      activeSection = 'keep';
+      continue;
+    }
 
-    if (!capture) continue;
+    if (JD_IGNORE_HEADER_RE.test(compact)) {
+      activeSection = 'ignore';
+      continue;
+    }
 
-    // Token-level cleanup
-    const words = s.match(/[A-Za-z][A-Za-z0-9+.#/-]*/g) || [];
-    const kept = words.filter(w => {
-      const lw = w.toLowerCase();
-      if (STOPWORDS.has(lw)) return false;
-      if (ADJECTIVES.has(lw)) return false;
-      if (lw.endsWith('ly') && lw.length > 3) return false;   // adverb heuristic
-      return true;
-    });
+    const candidates = lineToBullets(line);
+    for (const candidate of candidates) {
+      const bullet = normalizeBulletText(candidate);
+      const key = bullet.toLowerCase();
 
-    if (kept.length < 4 || kept.length > 30) continue;        // skip too-short / too-long
-    bullets.push(kept.join(' ').replace(/,/g, ''));
+      if (!isUsefulBullet(bullet)) continue;
+      if (activeSection === 'ignore' && !/(portfolio|qualif|require|preferred|must have|nice to have|skill|experience|degree|student|graduate|exposure|motion graphics|animation)/i.test(bullet)) {
+        continue;
+      }
+      if (seen.has(key)) continue;
 
-    if (bullets.length >= maxBullets) break;
-  }
+      seen.add(key);
+      bullets.push(bullet);
 
-  if (bullets.length === 0) {
-    // Fallback: nothing matched a section header. Take the first 6 mid-length sentences after token cleanup.
-    for (const raw of sentences) {
-      const s = raw.trim();
-      if (!s || FLUFF_OPENER_RE.test(s)) continue;
-      const words = s.match(/[A-Za-z][A-Za-z0-9+.#/-]*/g) || [];
-      const kept = words.filter(w => {
-        const lw = w.toLowerCase();
-        return !STOPWORDS.has(lw) && !ADJECTIVES.has(lw) && !(lw.endsWith('ly') && lw.length > 3);
-      });
-      if (kept.length >= 5 && kept.length <= 30) bullets.push(kept.join(' ').replace(/,/g, ''));
-      if (bullets.length >= 6) break;
+      if (bullets.length >= maxBullets) {
+        return bullets.map((entry) => `- ${entry}`).join('\n');
+      }
     }
   }
 
-  return bullets.length ? bullets.map(b => '- ' + b).join('\n') : null;
+  return bullets.length ? bullets.map((entry) => `- ${entry}`).join('\n') : null;
 }
 
 const { compressCompany, extractStructured } = require('./companyCompact');
 
-// ─────────────────── main normalize() ───────────────────
+function hydrateJobCompacts(job) {
+  if (!job || typeof job !== 'object') return job;
+
+  const recomputedDescriptionCompact = job.full_description ? compressJD(job.full_description) : null;
+  const recomputedCompanyCompact = job.company_details ? compressCompany(job.company_details) : null;
+
+  return {
+    ...job,
+    description_compact: recomputedDescriptionCompact || job.description_compact || null,
+    company_compact: recomputedCompanyCompact || job.company_compact || null,
+  };
+}
 
 function normalize(row, { fetchedAt = null } = {}) {
   const job_link = String(row.job_link || '').trim();
@@ -186,8 +238,6 @@ function normalize(row, { fetchedAt = null } = {}) {
   const linkedin_job_id = m[1];
   const { work_mode, employment_type } = splitJobType(row.job_type);
   const meta = parseMeta(row.meta_info, fetchedAt);
-
-  // Promotion can also leak in via extra_info ("Viewed\nPromoted")
   const promoted_from_extra = /\bpromoted\b/i.test(String(row.extra_info || ''));
 
   const company_details = row.company_details && row.company_details !== 'N/A' ? row.company_details : null;
@@ -201,7 +251,6 @@ function normalize(row, { fetchedAt = null } = {}) {
       job_link,
       title: cleanTitle(row.title || row.title_full),
       company: stripCommas(String(row.company || '').trim()),
-      // company_full intentionally dropped
       location: cleanLocation(row.location),
       work_mode,
       employment_type,
@@ -229,4 +278,15 @@ function normalize(row, { fetchedAt = null } = {}) {
   };
 }
 
-module.exports = { normalize, cleanTitle, cleanLocation, parseMeta, compressJD, compressCompany, extractStructured, stripCommas, commasToSemicolons };
+module.exports = {
+  normalize,
+  cleanTitle,
+  cleanLocation,
+  parseMeta,
+  compressJD,
+  compressCompany,
+  extractStructured,
+  hydrateJobCompacts,
+  stripCommas,
+  commasToSemicolons,
+};

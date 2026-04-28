@@ -24,6 +24,7 @@ router.post('/:upload_id/save', jobUploadController.save);
 // Management
 router.get('/', jobUploadController.listUploads);
 router.get('/master-jobs', jobUploadController.listJobs);
+router.delete('/:upload_id', jobUploadController.deleteUpload);
 router.delete('/purge-all', jobUploadController.purgeAll);
 
 module.exports = router;

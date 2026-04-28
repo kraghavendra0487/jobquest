@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { hydrateJobCompacts } = require('../utils/jobNormalizer');
 
 const jobModel = {
   /**
@@ -49,20 +50,61 @@ const jobModel = {
     limit = 20, 
     search = '', 
     school = '',
+    job_id = '',
     status = '', 
     work_mode = '', 
     employment_type = '',
     is_promoted = '',
     is_reposted = '',
     upload_id = '',
+    date_filter = '',
+    min_score = '',
     sort = 'posted_at',
     order = 'desc'
   }) {
-    const offset = (page - 1) * limit;
+    const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 20));
+    const offset = (pageNumber - 1) * pageSize;
+
+    const getIstRange = (filter) => {
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(now);
+
+      const year = parts.find((part) => part.type === 'year')?.value;
+      const month = parts.find((part) => part.type === 'month')?.value;
+      const day = parts.find((part) => part.type === 'day')?.value;
+
+      if (!year || !month || !day) return null;
+
+      const todayStart = new Date(`${year}-${month}-${day}T00:00:00+05:30`);
+      const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      if (filter === 'today') {
+        return { start: todayStart.toISOString(), end: tomorrowStart.toISOString() };
+      }
+
+      if (filter === 'yesterday') {
+        const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+        return { start: yesterdayStart.toISOString(), end: todayStart.toISOString() };
+      }
+
+      if (filter === 'week') {
+        const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
+        return { start: weekStart.toISOString(), end: tomorrowStart.toISOString() };
+      }
+
+      return null;
+    };
 
     const buildQuery = (selectCols) => {
       let q = supabase.from('jobs').select(selectCols, { count: 'exact' });
       if (search) q = q.or(`title.ilike.%${search}%,company.ilike.%${search}%`);
+      if (job_id) q = q.eq('id', job_id);
       if (school) q = q.contains('assigned_schools', [school]);
       if (status) q = q.eq('status', status);
       if (work_mode) q = q.eq('work_mode', work_mode);
@@ -70,17 +112,78 @@ const jobModel = {
       if (is_promoted !== '') q = q.eq('is_promoted', is_promoted === 'true');
       if (is_reposted !== '') q = q.eq('is_reposted', is_reposted === 'true');
       if (upload_id) q = q.eq('upload_id', upload_id);
-      return q.order(sort, { ascending: order === 'asc' }).range(offset, offset + limit - 1);
+      if (min_score !== '') q = q.gte('ai_score', Number(min_score));
+
+      const dateRange = getIstRange(date_filter);
+      if (dateRange) {
+        q = q.gte('posted_at', dateRange.start).lt('posted_at', dateRange.end);
+      }
+
+      if (sort === 'ai_score') {
+        return q
+          .order('ai_score', { ascending: order === 'asc', nullsFirst: false })
+          .order('posted_at', { ascending: false, nullsFirst: false })
+          .range(offset, offset + pageSize - 1);
+      }
+
+      return q
+        .order(sort, { ascending: order === 'asc', nullsFirst: false })
+        .range(offset, offset + pageSize - 1);
     };
 
-    // Try with new columns first, fall back to base columns if they don't exist yet
-    let { data, error, count } = await buildQuery('*');
+    const extendedCols = [
+      'id',
+      'linkedin_job_id',
+      'job_link',
+      'title',
+      'company',
+      'company_id',
+      'location',
+      'work_mode',
+      'employment_type',
+      'apply_type',
+      'apply_destination',
+      'extra_info',
+      'meta_info',
+      'full_description',
+      'company_details',
+      'description_compact',
+      'company_compact',
+      'company_industry',
+      'company_size',
+      'company_followers',
+      'source',
+      'status',
+      'uploaded_by',
+      'upload_id',
+      'posted_at',
+      'posted_relative',
+      'applicant_count',
+      'applicant_signal',
+      'response_signal',
+      'is_promoted',
+      'is_reposted',
+      'assigned_schools',
+      'ai_score',
+      'estimated_salary_lpa',
+      'fetched_at',
+      'created_at',
+      'updated_at',
+    ].join(',');
+
+    // Try with new columns first, fall back if a migration has not run yet.
+    let { data, error, count } = await buildQuery(extendedCols);
     if (error && error.message && error.message.includes('does not exist')) {
       const baseCols = 'id,linkedin_job_id,job_link,title,company,company_id,location,work_mode,employment_type,apply_type,apply_destination,extra_info,meta_info,full_description,company_details,description_compact,company_compact,source,status,uploaded_by,upload_id,posted_at,posted_relative,applicant_count,applicant_signal,response_signal,is_promoted,is_reposted,fetched_at,created_at,updated_at';
       ({ data, error, count } = await buildQuery(baseCols));
     }
     if (error) throw error;
-    return { data, total: count, page, limit };
+    return {
+      data: (data || []).map(hydrateJobCompacts),
+      total: count,
+      page: pageNumber,
+      limit: pageSize,
+    };
   }
 };
 
