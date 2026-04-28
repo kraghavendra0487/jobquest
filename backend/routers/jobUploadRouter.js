@@ -1,0 +1,31 @@
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const jobUploadController = require('../controllers/jobUploadController');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
+
+// Multer config for memory storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const ok = /\.(xlsx|xls)$/i.test(file.originalname);
+    cb(ok ? null : new Error('Only .xlsx/.xls files are allowed'), ok);
+  },
+});
+
+// All routes require admin
+router.use(requireAuth, requireAdmin);
+
+// Upload pipeline
+router.post('/preview', upload.single('file'), jobUploadController.preview);
+router.get('/:upload_id/preview-summary', jobUploadController.getPreviewSummary);
+router.post('/:upload_id/save', jobUploadController.save);
+router.post('/:upload_id/refetched-at', jobUploadController.refetchedAt);
+
+// Management
+router.get('/', jobUploadController.listUploads);
+router.get('/master-jobs', jobUploadController.listJobs);
+router.delete('/purge-all', jobUploadController.purgeAll);
+
+module.exports = router;

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schools & Programs Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfcfd;
+            color: #1e293b;
+        }
+
+        .custom-shadow {
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            z-index: 50;
+            min-width: 180px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+            animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-overlay {
+            background-color: rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(8px);
+        }
+
+        .program-badge {
+            transition: all 0.2s;
+        }
+
+        .program-badge:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .delete-btn {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        /* Hide horizontal scrollbar but keep functionality */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+
+    <!-- Top Bar -->
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
+        <div>
+            <h1 class="text-4xl font-extrabold tracking-tight text-slate-900">Schools & Programs</h1>
+            <p class="text-slate-500 mt-2 font-medium">Manage your academic infrastructure seamlessly.</p>
+        </div>
+        <button onclick="openSchoolModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 hover:-translate-y-0.5">
+            <i class="fas fa-plus"></i> Add New School
+        </button>
+    </div>
+
+    <!-- Main List Container -->
+    <div class="max-w-6xl mx-auto space-y-4" id="schoolContainer">
+        <!-- School Cards will be injected here -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden max-w-6xl mx-auto py-20 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+        <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-university text-3xl text-slate-300"></i>
+        </div>
+        <h3 class="text-xl font-bold text-slate-700">No Schools Setup</h3>
+        <p class="text-slate-500 mb-6">Create your first school to begin adding programs.</p>
+        <button onclick="openSchoolModal()" class="text-indigo-600 font-bold hover:underline">Add School Now</button>
+    </div>
+
+    <!-- Modals (School & Program) -->
+    <div id="schoolModal" class="fixed inset-0 modal-overlay z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="p-8">
+                <h3 id="modalTitle" class="text-2xl font-bold text-slate-800 mb-6">Add School</h3>
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">School Name</label>
+                        <input type="text" id="schoolNameInput" class="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="e.g. School of Business">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Internal Code</label>
+                        <input type="text" id="schoolCodeInput" class="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="e.g. SOB">
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-slate-50 flex justify-end gap-3">
+                <button onclick="closeModals()" class="px-6 py-2.5 text-slate-500 font-bold hover:text-slate-700">Cancel</button>
+                <button onclick="saveSchool()" class="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-md">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="programModal" class="fixed inset-0 modal-overlay z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="p-8">
+                <h3 class="text-2xl font-bold text-slate-800 mb-6">Add Program</h3>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Program Title</label>
+                    <input type="text" id="programNameInput" class="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="e.g. B.Tech Computer Science">
+                </div>
+            </div>
+            <div class="p-6 bg-slate-50 flex justify-end gap-3">
+                <button onclick="closeModals()" class="px-6 py-2.5 text-slate-500 font-bold hover:text-slate-700">Cancel</button>
+                <button onclick="saveProgram()" class="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-md">Add Program</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-3.5 rounded-2xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200]">
+        <span id="toastMessage" class="font-medium"></span>
+    </div>
+
+    <script>
+        // --- STATE ---
+        let schools = [
+            { id: 1, name: 'School for Continuing Education and Professional Studies', code: 'SCEPS', programs: [] },
+            { id: 2, name: 'School of Allied and Healthcare Professions', code: 'SOAHP', programs: [] },
+            { id: 3, name: 'School of Business', code: 'SOB', programs: ['BBA', 'MBA'] },
+            { id: 4, name: 'School of Computer Science and Engineering', code: 'SOCSE', programs: ['B.TECH AI & ML', 'B.TECH COMPUTER SCIENCE', 'M.TECH COMPUTER SCIENCE'] },
+            { id: 5, name: 'School of Design and Innovation', code: 'SDI', programs: ['B.DES'] }
+        ];
+
+        let editingSchoolId = null;
+        let addingToSchoolId = null;
+
+        // --- RENDER ---
+        function render() {
+            const container = document.getElementById('schoolContainer');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (schools.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            container.innerHTML = schools.map(school => `
+                <div class="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center gap-6 relative group transition-all hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-50/50">
+                    
+                    <!-- Icon & Info -->
+                    <div class="flex items-center gap-5 flex-1 min-w-0">
+                        <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500 text-xl flex-shrink-0">
+                            <i class="fas fa-university"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-3 mb-1">
+                                <h3 class="font-bold text-slate-800 truncate text-lg">${school.name}</h3>
+                                <span class="bg-slate-100 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-md flex-shrink-0">
+                                    ${school.code}
+                                </span>
+                            </div>
+                            <!-- Programs Tags -->
+                            <div class="flex flex-wrap gap-2">
+                                ${school.programs.length > 0 
+                                    ? school.programs.map((p, i) => `
+                                        <div class="program-badge group/tag bg-slate-50 border border-slate-100 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-slate-600 font-medium hover:bg-white hover:border-indigo-200">
+                                            <span>${p}</span>
+                                            <button onclick="deleteProgram(${school.id}, ${i})" class="delete-btn text-slate-300 hover:text-red-500">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    `).join('') 
+                                    : '<span class="text-slate-400 text-sm italic">No programs added yet</span>'
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions Dropdown -->
+                    <div class="flex items-center gap-4 ml-auto self-end md:self-center">
+                        <div class="relative inline-block text-left">
+                            <button onclick="toggleMenu(event, ${school.id})" class="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-2xl transition-all border border-transparent hover:border-slate-200">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <div id="menu-${school.id}" class="dropdown-menu">
+                                <button onclick="openProgramModal(${school.id})" class="w-full text-left px-4 py-3 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 flex items-center gap-3 border-b border-slate-50">
+                                    <i class="fas fa-plus"></i> Add Program
+                                </button>
+                                <button onclick="editSchool(${school.id})" class="w-full text-left px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 flex items-center gap-3">
+                                    <i class="fas fa-pen text-slate-400"></i> Edit Details
+                                </button>
+                                <button onclick="deleteSchool(${school.id})" class="w-full text-left px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 flex items-center gap-3">
+                                    <i class="fas fa-trash"></i> Delete School
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- ACTIONS ---
+        function toggleMenu(e, id) {
+            e.stopPropagation();
+            const menu = document.getElementById(`menu-${id}`);
+            const isShowing = menu.classList.contains('show');
+            
+            // Close all first
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+            
+            if (!isShowing) menu.classList.add('show');
+        }
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+        });
+
+        function openSchoolModal(id = null) {
+            editingSchoolId = id;
+            const modal = document.getElementById('schoolModal');
+            const title = document.getElementById('modalTitle');
+            const nameIn = document.getElementById('schoolNameInput');
+            const codeIn = document.getElementById('schoolCodeInput');
+
+            if (id) {
+                const s = schools.find(x => x.id === id);
+                title.innerText = "Edit School";
+                nameIn.value = s.name;
+                codeIn.value = s.code;
+            } else {
+                title.innerText = "Add New School";
+                nameIn.value = '';
+                codeIn.value = '';
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function openProgramModal(id) {
+            addingToSchoolId = id;
+            document.getElementById('programNameInput').value = '';
+            document.getElementById('programModal').classList.remove('hidden');
+            document.getElementById('programNameInput').focus();
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.fixed.inset-0').forEach(m => m.classList.add('hidden'));
+            editingSchoolId = null;
+            addingToSchoolId = null;
+        }
+
+        function saveSchool() {
+            const name = document.getElementById('schoolNameInput').value.trim();
+            const code = document.getElementById('schoolCodeInput').value.trim();
+            if (!name || !code) return showToast("Fields required");
+
+            if (editingSchoolId) {
+                const s = schools.find(x => x.id === editingSchoolId);
+                s.name = name;
+                s.code = code.toUpperCase();
+            } else {
+                schools.push({ id: Date.now(), name, code: code.toUpperCase(), programs: [] });
+            }
+            closeModals();
+            render();
+            showToast("Saved successfully");
+        }
+
+        function saveProgram() {
+            const val = document.getElementById('programNameInput').value.trim();
+            if (!val) return;
+            const s = schools.find(x => x.id === addingToSchoolId);
+            s.programs.push(val.toUpperCase());
+            closeModals();
+            render();
+            showToast("Program added");
+        }
+
+        function deleteSchool(id) {
+            if (confirm("Delete this school?")) {
+                schools = schools.filter(x => x.id !== id);
+                render();
+                showToast("School deleted");
+            }
+        }
+
+        function deleteProgram(sId, pIdx) {
+            const s = schools.find(x => x.id === sId);
+            s.programs.splice(pIdx, 1);
+            render();
+        }
+
+        function editSchool(id) {
+            openSchoolModal(id);
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = msg;
+            t.classList.replace('opacity-0', 'opacity-100');
+            setTimeout(() => t.classList.replace('opacity-100', 'opacity-0'), 2500);
+        }
+
+        // Init
+        render();
+    </script>
+</body>
+</html>

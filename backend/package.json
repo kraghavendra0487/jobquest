@@ -1,0 +1,30 @@
+{
+  "name": "job_upload",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx kill-port 5000 && node server.js",
+    "dev": "npx kill-port 5000 && nodemon server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "kill-port": "^2.0.1",
+    "nodemon": "^3.1.14"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.104.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "openai": "^6.34.0",
+    "postgres": "^3.4.9",
+    "tiktoken": "^1.0.22",
+    "xlsx": "^0.18.5"
+  }
+}
