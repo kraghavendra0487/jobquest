@@ -142,49 +142,6 @@ const jobUploadController = {
   },
 
   /**
-   * GET /api/admin/job-uploads/:upload_id/preview-summary
-   * Returns the cached preview summary if still in cache.
-   * If cache expired (server restart), returns 410.
-   */
-  async getPreviewSummary(req, res) {
-    const { upload_id } = req.params;
-    try {
-      const cached = uploadCache.get(upload_id);
-      if (!cached) {
-        // Check if it was already saved
-        const upload = await jobUploadModel.findById(upload_id);
-        if (upload && upload.status !== 'previewed') {
-          return res.json({
-            upload_id,
-            already_saved: true,
-            status: upload.status,
-            inserted_rows: upload.inserted_rows,
-          });
-        }
-        return res.status(410).json({ error: 'Preview expired. Please re-upload.' });
-      }
-      return res.json({
-        upload_id,
-        already_saved: false,
-        total_rows: cached.jobs.length + (cached.summary.duplicate_in_db || 0) + (cached.summary.duplicate_in_file || 0) + (cached.summary.invalid || 0),
-        valid_rows: cached.jobs.length + (cached.summary.duplicate_in_db || 0) + (cached.summary.duplicate_in_file || 0),
-        invalid_rows: cached.summary.invalid || 0,
-        duplicate_in_file: cached.summary.duplicate_in_file || 0,
-        duplicate_in_db: cached.summary.duplicate_in_db || 0,
-        new_rows: cached.summary.new || 0,
-        sample: cached.jobs.slice(0, 10).map(j => ({
-          title: j.title,
-          company: j.company,
-          location: j.location,
-          posted_relative: j.posted_relative
-        })),
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  /**
    * POST /api/admin/job-uploads/:upload_id/save
    * Commits the cached 'new' jobs to the database.
    */
@@ -305,59 +262,6 @@ const jobUploadController = {
     } catch (err) {
       console.error('[Upload Save Error]', err);
       await jobUploadModel.update(upload_id, { status: 'failed', error: err.message });
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  /**
-   * POST /api/admin/job-uploads/:upload_id/refetched-at
-   * Updates the fetched_at timestamp for a cached preview.
-   */
-  async refetchedAt(req, res) {
-    const { upload_id } = req.params;
-    const { fetched_at } = req.body;
-
-    if (!fetched_at) {
-      return res.status(400).json({ error: 'fetched_at is required' });
-    }
-
-    try {
-      const cached = uploadCache.get(upload_id);
-      if (!cached) {
-        return res.status(404).json({ error: 'Preview not found or expired' });
-      }
-
-      // Re-run normalize logic for cached jobs
-      // Note: cached.jobs already contains normalized data. 
-      // We need to update posted_at based on the new fetched_at.
-      const updatedJobs = cached.jobs.map(job => {
-        // Recalculate posted_at using parseMeta logic (simplified here since we already have offset)
-        // Actually, it's safer to re-normalize from raw if available, 
-        // but we only cached the normalized job objects.
-        // Let's re-parse the meta_info to get the correct posted_at.
-        const { parseMeta } = require('../utils/jobNormalizer');
-        const meta = parseMeta(job.meta_info, fetched_at);
-        
-        return {
-          ...job,
-          fetched_at,
-          posted_at: meta.posted_at
-        };
-      });
-
-      // Update cache
-      uploadCache.set(upload_id, {
-        ...cached,
-        fetched_at,
-        jobs: updatedJobs
-      });
-
-      // Update upload record
-      await jobUploadModel.update(upload_id, { fetched_at });
-
-      res.json({ success: true, fetched_at });
-    } catch (err) {
-      console.error('[Refetched At Error]', err);
       res.status(500).json({ error: err.message });
     }
   },

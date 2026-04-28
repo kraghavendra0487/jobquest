@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const authRouter = require('./routers/authRouter');
 const schoolRouter = require('./routers/schoolRouter');
 const userRouter = require('./routers/userRouter');
 const jobUploadRouter = require('./routers/jobUploadRouter');
@@ -23,7 +22,6 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/auth', authRouter);
 app.use('/api/schools', schoolRouter);
 app.use('/api/users', userRouter);
 app.use('/api/admin/job-uploads', jobUploadRouter);

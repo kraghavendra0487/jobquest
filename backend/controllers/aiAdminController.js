@@ -1,25 +1,6 @@
 // backend/controllers/aiAdminController.js 
-const { preflight, chat, chatJSON, PRICING, MODEL } = require('../services/aiClient'); 
+const { preflight, MODEL } = require('../services/aiClient'); 
 const { supabase } = require('../config/supabase'); 
- 
-/**
- * GET /api/admin/ai/preflight
- */
-exports.preflight = async (req, res) => { 
-  const result = await preflight(); 
-  if (result.ok) { 
-    res.json(result); 
-  } else { 
-    res.status(503).json(result); 
-  } 
-}; 
- 
-/**
- * GET /api/admin/ai/pricing
- */
-exports.getPricing = (req, res) => { 
-  res.json({ model: MODEL, pricing: PRICING }); 
-}; 
  
 /**
  * POST /api/admin/ai/playground
@@ -95,43 +76,4 @@ exports.estimate = (req, res) => {
     expected_completion_tokens: expected_output_tokens,
     estimated_cost_usd: cost,
   });
-};
-
-/**
- * GET /api/admin/ai-batches
- */
-exports.listBatches = async (req, res) => {
-  try {
-    const { purpose } = req.query;
-    let query = supabase.from('ai_batches').select('*').order('created_at', { ascending: false });
-    if (purpose) query = query.eq('purpose', purpose);
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-/**
- * GET /api/admin/ai-batches/:id
- */
-exports.getBatch = async (req, res) => {
-  try {
-    const { data, error } = await supabase.from('ai_batches').select('*').eq('id', req.params.id).single();
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-/**
- * POST /api/admin/ai-batches/:id/cancel
- */
-exports.cancelBatch = async (req, res) => {
-  const { cancelBatch } = require('../services/batchScheduler');
-  const success = cancelBatch(req.params.id);
-  res.json({ success, message: success ? 'Batch cancellation requested' : 'Batch not found or already finished' });
 };

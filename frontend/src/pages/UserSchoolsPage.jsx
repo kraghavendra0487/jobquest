@@ -14,7 +14,7 @@ import {
   Badge,
   Spinner,
   Center,
-  VStack,
+  VStack, 
   HStack,
   Icon,
   Button,
