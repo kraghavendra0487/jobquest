@@ -35,3 +35,22 @@ export function cleanDisplayTitle(title = '') {
 
   return normalized.replace(/\s+/g, ' ').trim();
 }
+
+export function formatCompactLine(line = '') {
+  return String(line || '')
+    .replace(/^[-;,.\s]+/, '')
+    .replace(/\s*;\s*/g, ', ')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/,\s*,+/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^,\s*/, '');
+}
+
+export function formatCompactText(text = '') {
+  return String(text || '')
+    .split('\n')
+    .map((line) => formatCompactLine(line))
+    .filter(Boolean)
+    .join(' ');
+}

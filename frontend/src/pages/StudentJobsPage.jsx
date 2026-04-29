@@ -39,8 +39,9 @@ import {
   Star,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { cleanDisplayTitle } from '../lib/jobDisplay';
+import { cleanDisplayTitle, formatCompactLine, formatCompactText } from '../lib/jobDisplay';
 import { formatIST, formatRelative } from '../lib/relativeTime';
+import { buildSchoolCodeMap, formatAssignedSchoolsCsv } from '../lib/schoolDisplay';
 import StudentShell from './student/StudentShell';
 
 const TABS = [
@@ -62,12 +63,19 @@ export default function StudentJobsPage({ session, userData }) {
   const [total, setTotal] = useState(0);
   const [tabIndex, setTabIndex] = useState(4);
   const [filters, setFilters] = useState({ search: '', work_mode: '' });
+  const [schools, setSchools] = useState([]);
   const [schoolLabel, setSchoolLabel] = useState(userData?.school || 'Your school');
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const searchDebounce = useRef(null);
   const limit = 20;
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  useEffect(() => {
+    api('/api/schools')
+      .then((data) => setSchools(Array.isArray(data) ? data : []))
+      .catch(() => setSchools([]));
+  }, []);
 
   const fetchJobs = useCallback(async (currentPage, currentFilters, currentTab) => {
     setLoading(true);
@@ -151,7 +159,11 @@ export default function StudentJobsPage({ session, userData }) {
     }
   }, [onOpen]);
 
-  const scopeLabel = useMemo(() => schoolLabel || userData?.school || 'Your school', [schoolLabel, userData?.school]);
+  const schoolCodeMap = useMemo(() => buildSchoolCodeMap(schools), [schools]);
+  const scopeLabel = useMemo(
+    () => (schoolCodeMap.get(schoolLabel) || schoolLabel || userData?.school || 'Your school'),
+    [schoolCodeMap, schoolLabel, userData?.school]
+  );
 
   return (
     <StudentShell session={session} userData={userData}>
@@ -299,10 +311,15 @@ export default function StudentJobsPage({ session, userData }) {
                         {job.work_mode && <Badge colorScheme="pink">{job.work_mode}</Badge>}
                         {job.employment_type && <Badge colorScheme="purple">{job.employment_type}</Badge>}
                         {job.company_industry && <Badge colorScheme="blue">{job.company_industry}</Badge>}
+                        {(job.assigned_schools || []).length > 0 && (
+                          <Badge colorScheme="green">
+                            {formatAssignedSchoolsCsv(job.assigned_schools, schoolCodeMap)}
+                          </Badge>
+                        )}
                       </HStack>
 
                       <Text color="gray.600" noOfLines={3}>
-                        {job.description_compact?.replace(/-\s*/g, '').replace(/\n/g, ' ') ||
+                        {formatCompactText(job.description_compact) ||
                           job.full_description ||
                           'No description available.'}
                       </Text>
@@ -416,7 +433,7 @@ export default function StudentJobsPage({ session, userData }) {
                       {selectedJob.description_compact.split('\n').filter(Boolean).map((line, index) => (
                         <HStack key={index} align="start" spacing={3}>
                           <Box w="6px" h="6px" borderRadius="full" bg="orange.400" mt={2} flexShrink={0} />
-                          <Text color="gray.700">{line.replace(/^-\s*/, '')}</Text>
+                          <Text color="gray.700">{formatCompactLine(line)}</Text>
                         </HStack>
                       ))}
                     </VStack>
@@ -436,7 +453,7 @@ export default function StudentJobsPage({ session, userData }) {
                       {selectedJob.company_compact.split('\n').filter(Boolean).map((line, index) => (
                         <HStack key={index} align="start" spacing={3}>
                           <Box w="6px" h="6px" borderRadius="full" bg="pink.400" mt={2} flexShrink={0} />
-                          <Text color="gray.700">{line.replace(/^-\s*/, '')}</Text>
+                          <Text color="gray.700">{formatCompactLine(line)}</Text>
                         </HStack>
                       ))}
                     </VStack>
@@ -471,6 +488,16 @@ export default function StudentJobsPage({ session, userData }) {
                   <Box>
                     <Text fontSize="xs" color="gray.500" mb={1}>Applicants</Text>
                     <Text fontWeight="semibold">{selectedJob?.applicant_count ?? '-'}</Text>
+                  </Box>
+                  <Box>
+                    <Text fontSize="xs" color="gray.500" mb={1}>Schools</Text>
+                    {(selectedJob?.assigned_schools || []).length > 0 ? (
+                      <Text fontWeight="semibold">
+                        {formatAssignedSchoolsCsv(selectedJob.assigned_schools, schoolCodeMap)}
+                      </Text>
+                    ) : (
+                      <Text fontSize="sm" color="gray.500">No school tags</Text>
+                    )}
                   </Box>
                   {selectedJob?.company_industry && (
                     <Box>

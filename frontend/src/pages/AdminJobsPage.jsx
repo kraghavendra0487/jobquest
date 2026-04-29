@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { cleanDisplayTitle } from '../lib/jobDisplay';
+import { cleanDisplayTitle, formatCompactLine, formatCompactText } from '../lib/jobDisplay';
 import { formatIST, formatRelative } from '../lib/relativeTime';
 import { buildSchoolCodeMap, formatAssignedSchoolsCsv } from '../lib/schoolDisplay';
 import { supabase } from '../lib/supabaseClient';
@@ -125,6 +125,10 @@ export default function AdminJobsPage({ session, userData }) {
 
   const schoolCountLabel = useMemo(() => filters.school || 'All schools', [filters.school]);
   const schoolCodeMap = useMemo(() => buildSchoolCodeMap(schools), [schools]);
+  const schoolCountCodeLabel = useMemo(
+    () => (filters.school ? schoolCodeMap.get(filters.school) || filters.school : 'All schools'),
+    [filters.school, schoolCodeMap]
+  );
 
   const openJob = useCallback(async (job) => {
     setSelectedJob(job);
@@ -218,7 +222,7 @@ export default function AdminJobsPage({ session, userData }) {
                   </VStack>
                   <Box bg="whiteAlpha.200" border="1px solid" borderColor="whiteAlpha.300" borderRadius="2xl" px={5} py={4} minW="220px">
                     <Text fontSize="xs" textTransform="uppercase" color="whiteAlpha.700" mb={1}>Current Scope</Text>
-                    <Heading size="md">{schoolCountLabel}</Heading>
+                    <Heading size="md">{schoolCountCodeLabel}</Heading>
                   </Box>
                 </HStack>
               </Box>
@@ -259,7 +263,7 @@ export default function AdminJobsPage({ session, userData }) {
                 >
                   <option value="">All schools</option>
                   {schools.map((school) => (
-                    <option key={school.id} value={school.name}>{school.name}</option>
+                    <option key={school.id} value={school.name}>{school.code || school.name}</option>
                   ))}
                 </Select>
               </SimpleGrid>
@@ -267,7 +271,7 @@ export default function AdminJobsPage({ session, userData }) {
               <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={4} wrap="wrap">
                 <HStack spacing={3}>
                   <Badge colorScheme="blue" px={3} py={1} borderRadius="full">{total} jobs</Badge>
-                  <Badge colorScheme="gray" px={3} py={1} borderRadius="full">{schoolCountLabel}</Badge>
+                  <Badge colorScheme="gray" px={3} py={1} borderRadius="full">{schoolCountCodeLabel}</Badge>
                 </HStack>
                 <Select maxW="220px" bg="white" borderColor="blue.100" borderRadius="xl"
                   value={filters.work_mode}
@@ -325,7 +329,7 @@ export default function AdminJobsPage({ session, userData }) {
                             )}
                           </HStack>
                           <Text color="gray.600" noOfLines={3}>
-                            {job.description_compact?.replace(/-\s*/g, '').replace(/\n/g, ' ') || job.full_description || 'No description available.'}
+                            {formatCompactText(job.description_compact) || job.full_description || 'No description available.'}
                           </Text>
                           <HStack justify="space-between" align="center" flexWrap="wrap" spacing={3}>
                             <HStack spacing={1} color="gray.500">
@@ -419,7 +423,7 @@ export default function AdminJobsPage({ session, userData }) {
                       {selectedJob.description_compact.split('\n').filter(Boolean).map((line, index) => (
                         <HStack key={index} align="start" spacing={3}>
                           <Box w="6px" h="6px" borderRadius="full" bg="blue.400" mt={2} flexShrink={0} />
-                          <Text color="gray.700">{line.replace(/^-\s*/, '')}</Text>
+                          <Text color="gray.700">{formatCompactLine(line)}</Text>
                         </HStack>
                       ))}
                     </VStack>
@@ -434,7 +438,7 @@ export default function AdminJobsPage({ session, userData }) {
                       {selectedJob.company_compact.split('\n').filter(Boolean).map((line, index) => (
                         <HStack key={index} align="start" spacing={3}>
                           <Box w="6px" h="6px" borderRadius="full" bg="cyan.400" mt={2} flexShrink={0} />
-                          <Text color="gray.700">{line.replace(/^-\s*/, '')}</Text>
+                          <Text color="gray.700">{formatCompactLine(line)}</Text>
                         </HStack>
                       ))}
                     </VStack>
