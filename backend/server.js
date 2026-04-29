@@ -8,7 +8,7 @@ const aiRouter = require('./routers/aiRouter');
 const { connectSupabase } = require('./config/supabase');
 
 const app = express();
-const PORT = 5000;
+const PORT = 8080;
 
 // Initialize Supabase
 connectSupabase();
