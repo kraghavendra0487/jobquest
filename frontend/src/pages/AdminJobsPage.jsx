@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { cleanDisplayTitle } from '../lib/jobDisplay';
 import { formatIST, formatRelative } from '../lib/relativeTime';
 import { supabase } from '../lib/supabaseClient';
 
@@ -300,7 +301,7 @@ export default function AdminJobsPage({ session, userData }) {
                         <Stack spacing={4}>
                           <HStack justify="space-between" align="start" spacing={4}>
                             <VStack align="start" spacing={1} flex="1">
-                              <Heading size="md" lineHeight="1.35">{job.title}</Heading>
+                              <Heading size="md" lineHeight="1.35">{cleanDisplayTitle(job.title)}</Heading>
                               <HStack spacing={2} color="gray.600" flexWrap="wrap">
                                 <HStack spacing={1}><Icon as={Building2} boxSize={4} /><Text fontSize="sm">{job.company || 'Unknown company'}</Text></HStack>
                                 <HStack spacing={1}><Icon as={MapPin} boxSize={4} /><Text fontSize="sm">{job.location || 'Location not listed'}</Text></HStack>
@@ -363,7 +364,7 @@ export default function AdminJobsPage({ session, userData }) {
         <ModalContent borderRadius="3xl" mx={4}>
           <ModalHeader borderBottom="1px solid" borderColor="blue.100" pr={12}>
             <VStack align="start" spacing={1}>
-              <Heading size="md">{selectedJob?.title}</Heading>
+              <Heading size="md">{cleanDisplayTitle(selectedJob?.title)}</Heading>
               <HStack spacing={3} color="gray.500" fontSize="sm" flexWrap="wrap">
                 <HStack spacing={1}><Icon as={Building2} boxSize={4} /><Text>{selectedJob?.company}</Text></HStack>
                 <HStack spacing={1}><Icon as={MapPin} boxSize={4} /><Text>{selectedJob?.location || 'Location not listed'}</Text></HStack>

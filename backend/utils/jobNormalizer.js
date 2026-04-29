@@ -27,6 +27,18 @@ function cleanTitle(s = '') {
   if (t.length > 20 && t.slice(0, half).trim() === t.slice(-half).trim()) {
     t = t.slice(0, half).trim();
   }
+
+  const words = t.split(/\s+/).filter(Boolean);
+  for (let size = Math.floor(words.length / 2); size >= 3; size -= 1) {
+    const first = words.slice(0, size).join(' ');
+    const second = words.slice(size, size * 2).join(' ');
+    if (first && first.toLowerCase() === second.toLowerCase()) {
+      t = first.trim();
+      break;
+    }
+  }
+
+  t = t.replace(/\s+with\s+verification\s*$/i, '').trim();
   return stripCommas(t.replace(/\s+/g, ' ').trim());
 }
 
@@ -225,6 +237,7 @@ function hydrateJobCompacts(job) {
 
   return {
     ...job,
+    title: cleanTitle(job.title),
     description_compact: recomputedDescriptionCompact || job.description_compact || null,
     company_compact: recomputedCompanyCompact || job.company_compact || null,
   };

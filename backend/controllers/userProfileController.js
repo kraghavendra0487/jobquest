@@ -10,17 +10,14 @@ exports.upsertProfile = async (req, res) => {
   }
 
   try {
-    // 1. Fetch school name for legacy field
     const { data: school, error: sErr } = await School.findById(school_id);
     if (sErr || !school) return res.status(400).json({ error: 'Invalid school_id' });
 
-    // 2. Upsert profile
     const updateData = {
       id: userId,
       email: req.user.email,
       school_id,
       usn,
-      school: school.name,
       role: req.user.role || 'student',
     };
 

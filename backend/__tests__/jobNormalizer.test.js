@@ -12,6 +12,9 @@ const titleIn = 'AI Enablement Strategist (NCG) â€” AI Enablement Strategis
 const titleOut = cleanTitle(titleIn);
 assert(titleOut === 'AI Enablement Strategist (NCG)', `cleanTitle failed: got "${titleOut}"`);
 
+const duplicatedTitleOut = cleanTitle('NLP/Machine Learning Intern (Summer) NLP/Machine Learning Intern (Summer) with verification');
+assert(duplicatedTitleOut === 'NLP/Machine Learning Intern (Summer)', `cleanTitle repeated-title failed: got "${duplicatedTitleOut}"`);
+
 const locIn = 'Bengaluru, Karnataka, India (Hybrid)';
 const locOut = cleanLocation(locIn);
 assert(locOut === 'Bengaluru Karnataka India', `cleanLocation failed: got "${locOut}"`);
