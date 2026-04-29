@@ -198,9 +198,9 @@ export default function DashboardPage({ session, userData }) {
                         <Box p={4} bg="gray.50" borderRadius="xl" border="1px solid" borderColor="gray.100">
                           <HStack mb={1}>
                             <Icon as={GraduationCap} color="blue.500" />
-                            <Text fontSize="xs" fontWeight="bold" color="gray.400" textTransform="uppercase">Program</Text>
+                            <Text fontSize="xs" fontWeight="bold" color="gray.400" textTransform="uppercase">USN</Text>
                           </HStack>
-                          <Text fontWeight="bold">{userData?.program}</Text>
+                          <Text fontWeight="bold">{userData?.usn}</Text>
                         </Box>
                       </SimpleGrid>
                     </CardBody>
