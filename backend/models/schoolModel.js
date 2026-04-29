@@ -4,6 +4,18 @@ const School = {
   findAll: async () => {
     return await supabase.from('schools').select('*').order('name');
   },
+  findNameCodeMap: async () => {
+    const { data, error } = await supabase.from('schools').select('name, code');
+    if (error) return { data: null, error };
+
+    const map = new Map(
+      (data || [])
+        .filter((school) => school?.name)
+        .map((school) => [school.name, school.code || school.name])
+    );
+
+    return { data: map, error: null };
+  },
   findById: async (id) => {
     return await supabase.from('schools').select('*').eq('id', id).single();
   },

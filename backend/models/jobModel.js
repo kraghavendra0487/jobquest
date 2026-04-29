@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const School = require('./schoolModel');
 const { hydrateJobCompacts } = require('../utils/jobNormalizer');
 const { dedupeJobsBySimilarity } = require('../utils/jobDeduper');
 
@@ -205,8 +206,15 @@ const jobModel = {
       ({ data, error, count } = await buildQuery(baseCols));
     }
     if (error) throw error;
+    const { data: schoolCodeMap } = await School.findNameCodeMap();
     const hydrated = (data || []).map(hydrateJobCompacts);
-    const deduped = dedupeJobsBySimilarity(hydrated);
+    const withSchoolCodes = hydrated.map((job) => ({
+      ...job,
+      assigned_schools: Array.isArray(job.assigned_schools)
+        ? job.assigned_schools.map((schoolName) => schoolCodeMap?.get(schoolName) || schoolName)
+        : job.assigned_schools,
+    }));
+    const deduped = dedupeJobsBySimilarity(withSchoolCodes);
     const removedCount = deduped.duplicates.length;
 
     return {

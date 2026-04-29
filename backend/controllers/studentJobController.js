@@ -20,6 +20,7 @@ const SELECT_COLUMNS = [
   'company_industry',
   'company_size',
   'company_followers',
+  'assigned_schools',
   'ai_score',
   'job_link',
 ].join(',');
@@ -134,8 +135,15 @@ exports.listStudentJobs = async (req, res) => {
     const { data, error, count } = await jobsQuery;
     if (error) throw error;
 
+    const { data: schoolCodeMap } = await School.findNameCodeMap();
     const hydrated = (data || []).map(hydrateJobCompacts);
-    const deduped = dedupeJobsBySimilarity(hydrated);
+    const withSchoolCodes = hydrated.map((job) => ({
+      ...job,
+      assigned_schools: Array.isArray(job.assigned_schools)
+        ? job.assigned_schools.map((schoolName) => schoolCodeMap?.get(schoolName) || schoolName)
+        : job.assigned_schools,
+    }));
+    const deduped = dedupeJobsBySimilarity(withSchoolCodes);
 
     res.json({
       data: deduped.unique,
@@ -143,7 +151,7 @@ exports.listStudentJobs = async (req, res) => {
       page: pageNumber,
       limit: pageSize,
       source,
-      school: school.name,
+      school: school.code || school.name,
     });
   } catch (err) {
     console.error('[Student Jobs Error]', err);
