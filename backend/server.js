@@ -44,6 +44,15 @@ app.use('/api', (req, res) => {
   res.status(404).json({ error: `Route ${req.method} ${req.url} not found` });
 });
 
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Backend is healthy',
+    port: PORT,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Default response for all other requests
 app.use((req, res) => {
   res.status(404).send('Not Found');
