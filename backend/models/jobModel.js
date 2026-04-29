@@ -1,5 +1,6 @@
 const { supabase } = require('../config/supabase');
 const { hydrateJobCompacts } = require('../utils/jobNormalizer');
+const { dedupeJobsBySimilarity } = require('../utils/jobDeduper');
 
 const jobModel = {
   /**
@@ -13,6 +14,32 @@ const jobModel = {
     
     if (error) throw error;
     return new Set(data.map(j => j.linkedin_job_id));
+  },
+
+  async findPotentialDuplicates(jobs) {
+    const companies = [...new Set(
+      jobs
+        .map((job) => String(job.company || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (companies.length === 0) return [];
+
+    const matches = [];
+    const chunkSize = 50;
+
+    for (let index = 0; index < companies.length; index += chunkSize) {
+      const chunk = companies.slice(index, index + chunkSize);
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, linkedin_job_id, title, company, location, full_description, description_compact, company_details, company_compact')
+        .in('company', chunk);
+
+      if (error) throw error;
+      matches.push(...(data || []));
+    }
+
+    return matches;
   },
 
   /**
@@ -178,9 +205,13 @@ const jobModel = {
       ({ data, error, count } = await buildQuery(baseCols));
     }
     if (error) throw error;
+    const hydrated = (data || []).map(hydrateJobCompacts);
+    const deduped = dedupeJobsBySimilarity(hydrated);
+    const removedCount = deduped.duplicates.length;
+
     return {
-      data: (data || []).map(hydrateJobCompacts),
-      total: count,
+      data: deduped.unique,
+      total: Math.max((count || 0) - removedCount, 0),
       page: pageNumber,
       limit: pageSize,
     };

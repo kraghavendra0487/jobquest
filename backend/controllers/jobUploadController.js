@@ -5,6 +5,7 @@ const jobModel = require('../models/jobModel');
 const jobUploadModel = require('../models/jobUploadModel');
 const uploadCache = require('../services/uploadCache');
 const { supabase } = require('../config/supabase');
+const { dedupeJobsBySimilarity, isLikelyDuplicateJob } = require('../utils/jobDeduper');
 
 // No-op for Phase 6 (manual pipeline)
 const kickOffPipeline = async (uploadId) => {
@@ -36,14 +37,19 @@ const jobUploadController = {
       // Dedupe within file
       const seenIds = new Set();
       const withinFileDeduped = [];
+      const acceptedJobsInFile = [];
       let duplicateInFileCount = 0;
 
       for (const n of validRows) {
-        if (seenIds.has(n.job.linkedin_job_id)) {
+        const duplicateById = seenIds.has(n.job.linkedin_job_id);
+        const duplicateBySimilarity = acceptedJobsInFile.some((existing) => isLikelyDuplicateJob(n.job, existing));
+
+        if (duplicateById || duplicateBySimilarity) {
           duplicateInFileCount++;
           withinFileDeduped.push({ ...n, status: 'duplicate_in_file' });
         } else {
           seenIds.add(n.job.linkedin_job_id);
+          acceptedJobsInFile.push(n.job);
           withinFileDeduped.push({ ...n, status: 'pending_db_check' });
         }
       }
@@ -51,6 +57,10 @@ const jobUploadController = {
       // Dedupe against DB
       const idsToCheck = Array.from(seenIds);
       const existingIds = await jobModel.findExistingIds(idsToCheck);
+      const candidateJobsForDbCheck = withinFileDeduped
+        .filter((n) => n.status === 'pending_db_check')
+        .map((n) => n.job);
+      const existingSimilarJobs = await jobModel.findPotentialDuplicates(candidateJobsForDbCheck);
       
       let duplicateInDbCount = 0;
       let newJobsCount = 0;
@@ -58,7 +68,10 @@ const jobUploadController = {
       const finalRows = withinFileDeduped.map(n => {
         if (n.status === 'duplicate_in_file') return n;
         
-        if (existingIds.has(n.job.linkedin_job_id)) {
+        const duplicateByExistingId = existingIds.has(n.job.linkedin_job_id);
+        const duplicateBySimilarity = existingSimilarJobs.some((existing) => isLikelyDuplicateJob(n.job, existing));
+
+        if (duplicateByExistingId || duplicateBySimilarity) {
           duplicateInDbCount++;
           return { ...n, status: 'duplicate_in_db' };
         } else {
@@ -108,13 +121,19 @@ const jobUploadController = {
           fetched_at: fetched_at
         }));
 
+      const dedupedInsertSet = dedupeJobsBySimilarity(jobsToInsert);
+      const duplicateBySimilarityCount = dedupedInsertSet.duplicates.length;
+      if (duplicateBySimilarityCount > 0) {
+        duplicateInFileCount += duplicateBySimilarityCount;
+      }
+
       uploadCache.set(uploadRecord.id, {
         upload_id: uploadRecord.id,
-        jobs: jobsToInsert,
+        jobs: dedupedInsertSet.unique,
         raw_rows: rawRows, // Cache raw rows for step one
         fetched_at: fetched_at,
         summary: {
-          new: newJobsCount,
+          new: dedupedInsertSet.unique.length,
           duplicate_in_db: duplicateInDbCount,
           duplicate_in_file: duplicateInFileCount,
           invalid: invalidRowsCount
@@ -129,7 +148,7 @@ const jobUploadController = {
         fetched_at_source,
         raw_rows: rawRows,
         summary: {
-          new: newJobsCount,
+          new: dedupedInsertSet.unique.length,
           duplicate_in_db: duplicateInDbCount,
           duplicate_in_file: duplicateInFileCount,
           invalid: invalidRowsCount

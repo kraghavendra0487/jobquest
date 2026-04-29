@@ -1,6 +1,7 @@
 const { supabase } = require('../config/supabase');
 const School = require('../models/schoolModel');
 const { hydrateJobCompacts } = require('../utils/jobNormalizer');
+const { dedupeJobsBySimilarity } = require('../utils/jobDeduper');
 
 const SELECT_COLUMNS = [
   'id',
@@ -133,9 +134,12 @@ exports.listStudentJobs = async (req, res) => {
     const { data, error, count } = await jobsQuery;
     if (error) throw error;
 
+    const hydrated = (data || []).map(hydrateJobCompacts);
+    const deduped = dedupeJobsBySimilarity(hydrated);
+
     res.json({
-      data: (data || []).map(hydrateJobCompacts),
-      total: count || 0,
+      data: deduped.unique,
+      total: Math.max((count || 0) - deduped.duplicates.length, 0),
       page: pageNumber,
       limit: pageSize,
       source,

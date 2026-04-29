@@ -32,6 +32,7 @@ const STEPS = [
 ];
 
 const JOB_SELECT = 'id, title, company, location, work_mode, employment_type, posted_at, posted_relative, applicant_count, description_compact, full_description, company_details, company_compact, ai_score, assigned_schools, estimated_salary_lpa, company_id, upload_id';
+const JOB_RATING_BATCH_SIZE = 15;
 
 function parseOutputToUpdates(rawOutput, jobIdMap) {
   const lines = rawOutput.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -75,6 +76,49 @@ function renderTableValue(value) {
   if (Array.isArray(value)) return value.length ? value.join(', ') : '-';
   if (value == null || value === '') return '-';
   return String(value);
+}
+
+function buildJobRatingPrompt(batchJobs, schoolNames, batchIndex, totalBatches) {
+  const jobCsv = batchJobs.map((job, index) => {
+    const desc = (job.description_compact || job.full_description || 'No description')
+      .replace(/\n/g, ' ')
+      .replace(/"/g, "'")
+      .slice(0, 500);
+    return `${index + 1},"${(job.company || 'Unknown').replace(/"/g, "'")}","${(job.title || 'Untitled').replace(/"/g, "'")}","${desc}"`;
+  }).join('\n');
+
+  return [
+    `Batch ${batchIndex + 1} of ${totalBatches}`,
+    'Analyze each job ABSOLUTELY using Company Name, Job Title, and Job Description.',
+    'Scoring rubric (use absolute scoring, not relative ranking):',
+    '9.0–10.0 = elite/high-growth/high compensation (top tech, ML, strong product)',
+    '7.0–8.9 = strong internships with good growth',
+    '5.0–6.9 = average internships or support roles',
+    '3.0–4.9 = low growth / transactional roles',
+    'IMPORTANT:',
+    '- Score ABSOLUTELY, not relative to other jobs in this batch.',
+    '- Do NOT cluster scores around integers.',
+    '- Use ONE DECIMAL PLACE (examples: 7.4, 8.6, 9.2). Do not round everything to 7,8,9.',
+    '- Use full score range when justified.',
+    '- Consider these factors in scoring:',
+    '  1. Brand quality',
+    '  2. Role quality',
+    '  3. Growth potential',
+    '  4. Compensation potential',
+    '  5. Technical/AI/product exposure',
+    '  6. Career signaling value',
+    'Tasks:',
+    '- Assign relevant school(s) only from the provided school list.',
+    '- Estimate salary in INR LPA (infer if not provided).',
+    'Return ONLY CSV with columns:',
+    '#,Company,JobTitle,OverallScore,AssignedSchool(array[string]),EstimatedSalaryLPA',
+    'Example AssignedSchool: ["School A","School B"]',
+    'IMPORTANT: The # column must match the row number from input exactly.',
+    `School List: [${schoolNames}]`,
+    '',
+    'Job Details (#,Company,JobTitle,JobDescription):',
+    jobCsv,
+  ].join('\n');
 }
 
 export default function JobQuestPage({ session, userData }) {
@@ -298,24 +342,16 @@ export default function JobQuestPage({ session, userData }) {
       setUsingAllJobs(fallbackToAll);
 
       const schoolNames = schools.map((s) => s.name).join(', ');
-      const jobCsv = filteredJobs.map((j, i) => {
-        const desc = (j.description_compact || j.full_description || 'No description').replace(/\n/g, ' ').replace(/"/g, "'").slice(0, 400);
-        return `${i + 1},"${(j.company || 'Unknown').replace(/"/g, "'")}","${(j.title || 'Untitled').replace(/"/g, "'")}","${desc}"`;
-      }).join('\n');
-
-      setJobPrompt(
-        'Analyze the job using Company Name, Job Title and Job Description.\n' +
-        'Give an Overall AI Job Score (1-10) based on job quality, growth potential and compensation.\n' +
-        'Tasks:\n' +
-        '- Assign relevant school(s) only from the provided school list\n' +
-        '- Estimate salary in INR LPA (infer if not provided)\n\n' +
-        'Return ONLY CSV with columns:\n' +
-        '#,Company,JobTitle,OverallScore,AssignedSchool(array[string]),EstimatedSalaryLPA\n\n' +
-        'Example AssignedSchool: ["School A","School B"]\n' +
-        'IMPORTANT: The # column must match the row number from input exactly.\n\n' +
-        `School List: [${schoolNames}]\n\n` +
-        `Job Details (#,Company,JobTitle,JobDescription):\n${jobCsv}`
-      );
+      const batches = [];
+      for (let index = 0; index < filteredJobs.length; index += JOB_RATING_BATCH_SIZE) {
+        batches.push(filteredJobs.slice(index, index + JOB_RATING_BATCH_SIZE));
+      }
+      const promptPreview = batches
+        .map((batch, index) => buildJobRatingPrompt(batch, schoolNames, index, batches.length))
+        .join('\n\n____________________\n\n');
+      setJobPrompt(promptPreview);
+      setJobOutput('');
+      setParsedJobUpdates([]);
       setWizardStep('job-rating');
       if (fallbackToAll) {
         toast({ title: 'No 4+ rated companies', description: 'Showing all jobs instead.', status: 'warning' });
@@ -332,17 +368,29 @@ export default function JobQuestPage({ session, userData }) {
     setJobOutput('');
     setParsedJobUpdates([]);
     try {
-      const data = await api('/api/admin/ai/playground', {
-        method: 'POST',
-        body: { system_prompt: '', user_input: jobPrompt, json_mode: false, wrap_input: false },
-      });
-      const raw = data.response?.trim() || '';
-      setJobOutput(raw);
-      const jobIdMap = {};
-      jobs.forEach((j, i) => { jobIdMap[i + 1] = j.id; });
-      const updates = parseOutputToUpdates(raw, jobIdMap);
-      setParsedJobUpdates(updates);
-      toast({ title: `Parsed ${updates.length} job ratings`, status: 'info' });
+      const schoolNames = schoolsList.map((s) => s.name).join(', ');
+      const outputs = [];
+      const allUpdates = [];
+
+      for (let index = 0; index < jobBatches.length; index += 1) {
+        const batch = jobBatches[index];
+        const prompt = buildJobRatingPrompt(batch, schoolNames, index, jobBatches.length);
+        const data = await api('/api/admin/ai/playground', {
+          method: 'POST',
+          body: { system_prompt: '', user_input: prompt, json_mode: false, wrap_input: false },
+        });
+        const raw = data.response?.trim() || '';
+        outputs.push(`__________ Batch ${index + 1} / ${jobBatches.length} __________\n${raw}`);
+        setJobOutput(outputs.join('\n\n'));
+
+        const jobIdMap = {};
+        batch.forEach((job, batchRowIndex) => { jobIdMap[batchRowIndex + 1] = job.id; });
+        const updates = parseOutputToUpdates(raw, jobIdMap);
+        allUpdates.push(...updates);
+        setParsedJobUpdates([...allUpdates]);
+      }
+
+      toast({ title: `Parsed ${allUpdates.length} job ratings across ${jobBatches.length} batches`, status: 'info' });
     } catch (err) {
       toast({ title: 'AI request failed', description: err.message, status: 'error' });
     } finally {
@@ -495,6 +543,14 @@ export default function JobQuestPage({ session, userData }) {
     }
     return processedQuestRows;
   }, [wizardStep, mergedRawRows, processedQuestRows]);
+
+  const jobBatches = useMemo(() => {
+    const batches = [];
+    for (let index = 0; index < jobs.length; index += JOB_RATING_BATCH_SIZE) {
+      batches.push(jobs.slice(index, index + JOB_RATING_BATCH_SIZE));
+    }
+    return batches;
+  }, [jobs]);
 
   return (
     <Box minH="100vh" bg="gray.50">
@@ -666,8 +722,13 @@ export default function JobQuestPage({ session, userData }) {
                       <Icon as={Briefcase} color="purple.500" />
                       <Text fontWeight="bold" fontSize="lg">Job Rating</Text>
                       <Badge colorScheme="purple" variant="subtle" borderRadius="full">{jobs.length} jobs {usingAllJobs ? '(all companies)' : 'from 4+ rated companies'}</Badge>
+                      <Badge colorScheme="blue" variant="subtle" borderRadius="full">{jobBatches.length} batches</Badge>
                     </HStack>
                   </Flex>
+
+                  <Text fontSize="sm" color="gray.500">
+                    Jobs are split into batches of up to {JOB_RATING_BATCH_SIZE}. The AI outputs from every batch will be aggregated into one box below and saved together.
+                  </Text>
 
                   <Textarea value={jobPrompt} onChange={(e) => setJobPrompt(e.target.value)} rows={8} fontFamily="mono" fontSize="xs" bg="gray.50" borderRadius="lg" />
 
@@ -679,7 +740,7 @@ export default function JobQuestPage({ session, userData }) {
 
                   {jobOutput && (
                     <Box bg="white" p={4} borderRadius="xl" border="1px" borderColor="gray.200" shadow="sm">
-                      <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={2}>AI Output ({parsedJobUpdates.length} parsed)</Text>
+                      <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={2}>AI Output ({parsedJobUpdates.length} parsed across {jobBatches.length} batches)</Text>
                       <Box bg="gray.50" p={3} borderRadius="lg" fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap" maxH="200px" overflowY="auto">
                         {jobOutput}
                       </Box>
