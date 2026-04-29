@@ -15,6 +15,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { cleanDisplayTitle } from '../lib/jobDisplay';
 import { formatIST, formatRelative } from '../lib/relativeTime';
+import { buildSchoolCodeMap, formatAssignedSchoolsCsv } from '../lib/schoolDisplay';
 import { supabase } from '../lib/supabaseClient';
 
 const sidebarItems = [
@@ -123,6 +124,7 @@ export default function AdminJobsPage({ session, userData }) {
   };
 
   const schoolCountLabel = useMemo(() => filters.school || 'All schools', [filters.school]);
+  const schoolCodeMap = useMemo(() => buildSchoolCodeMap(schools), [schools]);
 
   const openJob = useCallback(async (job) => {
     setSelectedJob(job);
@@ -316,9 +318,11 @@ export default function AdminJobsPage({ session, userData }) {
                           <HStack spacing={2} flexWrap="wrap">
                             {job.work_mode && <Badge colorScheme="purple">{job.work_mode}</Badge>}
                             {job.employment_type && <Badge colorScheme="cyan">{job.employment_type}</Badge>}
-                            {(job.assigned_schools || []).slice(0, 2).map((school) => (
-                              <Badge key={school} colorScheme="green">{school}</Badge>
-                            ))}
+                            {(job.assigned_schools || []).length > 0 && (
+                              <Badge colorScheme="green">
+                                {formatAssignedSchoolsCsv(job.assigned_schools, schoolCodeMap)}
+                              </Badge>
+                            )}
                           </HStack>
                           <Text color="gray.600" noOfLines={3}>
                             {job.description_compact?.replace(/-\s*/g, '').replace(/\n/g, ' ') || job.full_description || 'No description available.'}
@@ -452,15 +456,13 @@ export default function AdminJobsPage({ session, userData }) {
                   <Box><Text fontSize="xs" color="gray.500" mb={1}>Applicants</Text><Text fontWeight="semibold">{selectedJob?.applicant_count ?? '-'}</Text></Box>
                   <Box>
                     <Text fontSize="xs" color="gray.500" mb={1}>Schools</Text>
-                    <VStack align="stretch" spacing={1}>
-                      {(selectedJob?.assigned_schools || []).length > 0 ? (
-                        selectedJob.assigned_schools.map((school) => (
-                          <Badge key={school} colorScheme="green" width="fit-content">{school}</Badge>
-                        ))
-                      ) : (
-                        <Text fontSize="sm" color="gray.500">No school tags</Text>
-                      )}
-                    </VStack>
+                    {(selectedJob?.assigned_schools || []).length > 0 ? (
+                      <Text fontWeight="semibold">
+                        {formatAssignedSchoolsCsv(selectedJob.assigned_schools, schoolCodeMap)}
+                      </Text>
+                    ) : (
+                      <Text fontSize="sm" color="gray.500">No school tags</Text>
+                    )}
                   </Box>
                   <Button as="a" href={selectedJob?.job_link || '#'} target="_blank" rel="noreferrer"
                     colorScheme="blue" borderRadius="xl" leftIcon={<ExternalLink size={16} />}
