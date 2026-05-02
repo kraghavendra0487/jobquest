@@ -70,7 +70,7 @@ export default function StudentDashboardPage({ session, userData }) {
                     <VStack spacing={4} mt={-12}>
                       <Avatar
                         size="2xl"
-                        src={session.user.user_metadata.avatar_url}
+                        src={session.user.user_metadata.avatar_url || session.user.user_metadata.picture}
                         border="5px solid white"
                         name={userData?.name}
                       />

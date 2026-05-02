@@ -6,14 +6,15 @@ import { useToast, Center, Spinner } from '@chakra-ui/react';
 // Pages
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
-import AdminJobsPage from './pages/AdminJobsPage';
 import DashboardPage from './pages/DashboardPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import StudentJobsPage from './pages/StudentJobsPage';
-import UserSchoolsPage from './pages/UserSchoolsPage';
-import JobProcessPage from './pages/JobProcessPage';
-import JobAutoPage from './pages/JobAutoPage';
-import JobQuestPage from './pages/JobQuestPage';
+import DatabasePage from './pages/DatabasePage';
+import AdminCompanyPage from './pages/AdminCompanyPage';
+import CompanyDetailPage from './pages/CompanyDetailPage';
+import AdminPipelineJobsPage from './pages/AdminPipelineJobsPage';
+import AdminJobDetailPage from './pages/AdminJobDetailPage';
+import AdminAllJobsPage from './pages/AdminAllJobsPage';
 // Routes
 import { RequireAuth } from './routes/RequireAuth';
 
@@ -76,7 +77,10 @@ function App() {
   }, [toast, navigate]);
 
   useEffect(() => {
+    let isMounted = true;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
       setSession(session);
       if (session) {
         checkUserInDB(session.user);
@@ -86,6 +90,7 @@ function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
       setSession(session);
       if (session) {
         checkUserInDB(session.user);
@@ -96,7 +101,10 @@ function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [checkUserInDB]);
 
   const handleOnboardingComplete = (data) => {
@@ -153,32 +161,15 @@ function App() {
         } 
       />
 
-      <Route 
-        path="/schools" 
-        element={
-          <RequireAuth session={session}>
-            {isNewUser ? (
-              <Navigate to="/onboarding" replace />
-            ) : (
-              isAdmin ? (
-                <UserSchoolsPage session={session} userData={userData} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            )}
-          </RequireAuth>
-        } 
-      />
-
       <Route
-        path="/admin-jobs"
+        path="/admin-pipeline-jobs"
         element={
           <RequireAuth session={session}>
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
               isAdmin ? (
-                <AdminJobsPage session={session} userData={userData} />
+                <AdminPipelineJobsPage session={session} userData={userData} />
               ) : (
                 <Navigate to="/" replace />
               )
@@ -187,49 +178,83 @@ function App() {
         }
       />
 
-      <Route 
-        path="/job-process/*" 
+      <Route
+        path="/admin-all-jobs"
         element={
           <RequireAuth session={session}>
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
               isAdmin ? (
-                <JobProcessPage session={session} userData={userData} />
+                <AdminAllJobsPage session={session} userData={userData} />
               ) : (
                 <Navigate to="/" replace />
               )
             )}
           </RequireAuth>
-        } 
-      />
-
-      <Route 
-        path="/job-auto" 
-        element={
-          <RequireAuth session={session}>
-            {isNewUser ? (
-              <Navigate to="/onboarding" replace />
-            ) : (
-              isAdmin ? (
-                <JobAutoPage session={session} userData={userData} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            )}
-          </RequireAuth>
-        } 
+        }
       />
 
       <Route
-        path="/job-quest"
+        path="/admin-database"
         element={
           <RequireAuth session={session}>
             {isNewUser ? (
               <Navigate to="/onboarding" replace />
             ) : (
               isAdmin ? (
-                <JobQuestPage session={session} userData={userData} />
+                <DatabasePage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            )}
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/admin-job-detail/:id"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <AdminJobDetailPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            )}
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/admin-company"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <AdminCompanyPage session={session} userData={userData} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            )}
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/admin-company-detail/:id"
+        element={
+          <RequireAuth session={session}>
+            {isNewUser ? (
+              <Navigate to="/onboarding" replace />
+            ) : (
+              isAdmin ? (
+                <CompanyDetailPage session={session} userData={userData} />
               ) : (
                 <Navigate to="/" replace />
               )

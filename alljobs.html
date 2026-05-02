@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Job Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+
+        .job-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .job-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .detail-panel {
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tab-active {
+            color: #4f46e5;
+            border-bottom: 2px solid #4f46e5;
+            background-color: #f5f3ff;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- Header & Navigation with Improvised Glassmorphism BG -->
+    <header class="sticky top-0 z-30 w-full bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm transition-all">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col pt-4 pb-2">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-200 text-white">
+                            <i data-lucide="zap" class="w-6 h-6"></i>
+                        </div>
+                        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Job<span class="text-indigo-600">Flow</span></h1>
+                    </div>
+                    
+                    <!-- Search Box -->
+                    <div class="relative flex-grow max-w-xl">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i data-lucide="search" class="w-5 h-5 text-slate-400"></i>
+                        </div>
+                        <input type="text" id="searchInput" 
+                            class="block w-full pl-11 pr-4 py-3 border-0 rounded-2xl leading-5 bg-slate-200/50 backdrop-blur-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm transition-all" 
+                            placeholder="Search jobs, companies, or keywords...">
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-slate-100">
+                    <button onclick="setTab('all')" id="tab-all" class="px-5 py-3 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-all rounded-t-lg tab-active">All Jobs</button>
+                    <button onclick="setTab('today')" id="tab-today" class="px-5 py-3 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-all rounded-t-lg">Today's Jobs</button>
+                    <button onclick="setTab('yesterday')" id="tab-yesterday" class="px-5 py-3 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-all rounded-t-lg">Yesterday</button>
+                    <button onclick="setTab('week')" id="tab-week" class="px-5 py-3 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-all rounded-t-lg">Past Week</button>
+                    <button onclick="setTab('premium')" id="tab-premium" class="px-5 py-3 text-sm font-semibold text-amber-600 hover:text-amber-700 transition-all rounded-t-lg flex items-center gap-1">
+                        <i data-lucide="crown" class="w-4 h-4"></i> Premium
+                    </button>
+                </div>
+
+                <!-- Advanced Filters -->
+                <div class="py-4 flex flex-wrap gap-3 items-center text-xs">
+                    <div class="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-xl font-bold">
+                        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                        <span>FILTERS</span>
+                    </div>
+                    
+                    <!-- School Filter -->
+                    <select id="schoolFilter" class="bg-white/50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium">
+                        <option value="">All Schools</option>
+                        <option value="MIT">MIT</option>
+                        <option value="Stanford">Stanford</option>
+                        <option value="Harvard">Harvard</option>
+                        <option value="IIT Bombay">IIT Bombay</option>
+                    </select>
+
+                    <!-- Job Rating Filter -->
+                    <select id="jobRatingFilter" class="bg-white/50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium">
+                        <option value="0">Job Rating: Any</option>
+                        <option value="4">4+ Stars</option>
+                        <option value="4.5">4.5+ Stars</option>
+                    </select>
+
+                    <!-- Company Rating Filter -->
+                    <select id="companyRatingFilter" class="bg-white/50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium">
+                        <option value="0">Company Rating: Any</option>
+                        <option value="4">4+ Stars</option>
+                        <option value="4.5">4.5+ Stars</option>
+                    </select>
+
+                    <button id="clearFilters" class="text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl font-bold transition-colors">RESET</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div class="mb-8 flex items-end justify-between">
+            <div>
+                <p class="text-slate-500 font-medium mb-1">Available Opportunities</p>
+                <h2 class="text-3xl font-bold text-slate-900"><span id="jobCount">0</span> Matches Found</h2>
+            </div>
+            <div class="hidden md:block text-right">
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Last updated: Just now</p>
+            </div>
+        </div>
+
+        <!-- Job Tiles Grid -->
+        <div id="jobGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Tiles generated by JS -->
+        </div>
+    </main>
+
+    <!-- Detail View Backdrop -->
+    <div id="detailBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 hidden transition-opacity opacity-0" onclick="closeDetails()"></div>
+
+    <!-- Detail Slide-over Panel -->
+    <div id="detailPanel" class="fixed top-0 right-0 h-full w-full sm:w-[550px] bg-white z-50 shadow-2xl translate-x-full detail-panel overflow-y-auto custom-scrollbar">
+        <div class="p-8">
+            <button onclick="closeDetails()" class="absolute top-6 right-6 p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            <div id="detailContent">
+                <!-- Content generated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const today = new Date().toISOString().split('T')[0];
+        const yesterdayDate = new Date();
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterday = yesterdayDate.toISOString().split('T')[0];
+
+        // Enhanced Mock Data
+        const mockJobs = [
+            {
+                id: 1,
+                job_title: "Senior AI Researcher",
+                company_name: "CyberCore Dynamics",
+                company_rating: 4.9,
+                location: "San Francisco, CA",
+                date: today,
+                industries: "Technology",
+                seniority_level: "Executive",
+                rating: 4.9,
+                assigned_schools: ["Stanford", "MIT"],
+                applicant_count: "12",
+                job_description: "Leading the frontier of generative AI. You will oversee a team of research scientists focused on LLM optimization and multi-modal foundations.",
+                about_company: "CyberCore is the fastest growing AI lab in the valley, specializing in ethical automation."
+            },
+            {
+                id: 2,
+                job_title: "Cloud Infrastructure Lead",
+                company_name: "TechNova Solutions",
+                company_rating: 4.5,
+                location: "Remote",
+                date: today,
+                industries: "Technology",
+                seniority_level: "Mid-Senior level",
+                rating: 4.7,
+                assigned_schools: ["MIT", "IIT Bombay", "Harvard"],
+                applicant_count: "45",
+                job_description: "Scale our distributed systems across 4 global regions. Experts in Kubernetes and Terraform required.",
+                about_company: "TechNova is a leader in cloud infrastructure and developer tools."
+            },
+            {
+                id: 3,
+                job_title: "Investment Analyst",
+                company_name: "FinFlow Systems",
+                company_rating: 4.2,
+                location: "New York, NY",
+                date: yesterday,
+                industries: "Finance",
+                seniority_level: "Entry Level",
+                rating: 3.8,
+                assigned_schools: ["Harvard", "Wharton"],
+                applicant_count: "120",
+                job_description: "Analyze market trends and assist in the management of our $2B portfolio.",
+                about_company: "FinFlow is revolutionizing how enterprise companies manage their treasury operations."
+            },
+            {
+                id: 4,
+                job_title: "UI/UX Design Intern",
+                company_name: "Glow Creative",
+                company_rating: 4.7,
+                location: "London, UK",
+                date: "2024-04-28",
+                industries: "Marketing",
+                seniority_level: "Entry Level",
+                rating: 4.4,
+                assigned_schools: ["RISD", "Stanford"],
+                applicant_count: "210",
+                job_description: "Learn from the best designers in the industry while working on real-world projects for Fortune 500 clients.",
+                about_company: "Glow Creative is a boutique agency focused on luxury digital experiences."
+            },
+            {
+                id: 5,
+                job_title: "Data Scientist",
+                company_name: "HealthBridge",
+                company_rating: 3.9,
+                location: "Chicago, IL",
+                date: "2024-04-25",
+                industries: "Healthcare",
+                seniority_level: "Mid-Senior level",
+                rating: 4.6,
+                assigned_schools: ["Stanford", "MIT"],
+                applicant_count: "56",
+                job_description: "Predictive modeling for patient readmission rates using neural networks.",
+                about_company: "HealthBridge connects patients with specialists using proprietary AI."
+            }
+        ];
+
+        let activeFilters = {
+            search: '',
+            school: '',
+            jobRating: 0,
+            companyRating: 0,
+            tab: 'all'
+        };
+
+        function setTab(tabId) {
+            activeFilters.tab = tabId;
+            document.querySelectorAll('[id^="tab-"]').forEach(btn => btn.classList.remove('tab-active'));
+            document.getElementById(`tab-${tabId}`).classList.add('tab-active');
+            renderJobs();
+        }
+
+        function renderJobs() {
+            const grid = document.getElementById('jobGrid');
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            const filteredJobs = mockJobs.filter(job => {
+                // Search filter
+                const matchesSearch = job.job_title.toLowerCase().includes(activeFilters.search.toLowerCase()) || 
+                                    job.company_name.toLowerCase().includes(activeFilters.search.toLowerCase());
+                
+                // Tab filter
+                let matchesTab = true;
+                if (activeFilters.tab === 'today') matchesTab = job.date === today;
+                if (activeFilters.tab === 'yesterday') matchesTab = job.date === yesterday;
+                if (activeFilters.tab === 'week') matchesTab = new Date(job.date) >= sevenDaysAgo;
+                if (activeFilters.tab === 'premium') matchesTab = job.rating >= 4.7;
+
+                // Select filters
+                const matchesSchool = !activeFilters.school || job.assigned_schools.includes(activeFilters.school);
+                const matchesJobRating = job.rating >= parseFloat(activeFilters.jobRating);
+                const matchesCoRating = job.company_rating >= parseFloat(activeFilters.companyRating);
+
+                return matchesSearch && matchesTab && matchesSchool && matchesJobRating && matchesCoRating;
+            });
+
+            document.getElementById('jobCount').innerText = filteredJobs.length;
+
+            grid.innerHTML = filteredJobs.map(job => `
+                <div class="job-card bg-white rounded-3xl border border-slate-100 p-6 cursor-pointer flex flex-col h-full shadow-sm shadow-slate-200/50" onclick="openDetails(${job.id})">
+                    <div class="flex justify-between items-start mb-5">
+                        <div class="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-3 rounded-2xl shadow-md shadow-indigo-100">
+                            <i data-lucide="building-2" class="w-6 h-6"></i>
+                        </div>
+                        <div class="flex flex-col items-end gap-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${job.date === today ? 'Today' : job.date === yesterday ? 'Yesterday' : job.date}</span>
+                            ${job.rating >= 4.7 ? '<span class="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100"><i data-lucide="award" class="w-3 h-3"></i> PREMIUM</span>' : ''}
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-lg font-extrabold text-slate-900 mb-1 leading-tight group-hover:text-indigo-600 transition-colors">${job.job_title}</h3>
+                    
+                    <div class="flex items-center gap-1 mb-4">
+                        <span class="text-sm font-bold text-slate-600">${job.company_name}</span>
+                        <div class="flex items-center text-amber-500 text-xs ml-1 font-bold">
+                            <i data-lucide="star" class="w-3 h-3 fill-current mr-0.5"></i>
+                            ${job.company_rating}
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-1.5 mb-5">
+                        ${job.assigned_schools.slice(0, 2).map(school => `
+                            <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50/50 border border-indigo-100 px-2 py-0.5 rounded-md">@${school}</span>
+                        `).join('')}
+                        ${job.assigned_schools.length > 2 ? `<span class="text-[10px] font-bold text-slate-400 px-1">+${job.assigned_schools.length - 2}</span>` : ''}
+                    </div>
+                    
+                    <div class="mt-auto space-y-2.5">
+                        <div class="flex items-center gap-2 text-slate-500 text-xs font-medium">
+                            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <span>${job.location}</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-500 text-xs font-medium">
+                            <i data-lucide="award" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <span>${job.seniority_level}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-5 pt-5 border-t border-slate-50 flex justify-between items-center">
+                        <div class="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                            Job Score: ${job.rating}
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                            ${job.applicant_count} APPLIED
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        function openDetails(jobId) {
+            const job = mockJobs.find(j => j.id === jobId);
+            const content = document.getElementById('detailContent');
+            const panel = document.getElementById('detailPanel');
+            const backdrop = document.getElementById('detailBackdrop');
+
+            content.innerHTML = `
+                <div class="mt-10">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-6 mb-8">
+                        <div class="w-20 h-20 bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-indigo-100">
+                            <i data-lucide="building-2" class="w-10 h-10"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-3xl font-black text-slate-900 leading-tight mb-2">${job.job_title}</h2>
+                            <div class="flex items-center gap-3">
+                                <span class="text-indigo-600 font-extrabold text-lg">${job.company_name}</span>
+                                <div class="flex items-center text-amber-500 font-black bg-amber-50 px-3 py-1 rounded-full text-sm">
+                                    <i data-lucide="star" class="w-4 h-4 fill-current mr-1"></i>
+                                    ${job.company_rating}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-3xl p-6 mb-8 grid grid-cols-2 gap-y-6 gap-x-4">
+                        <div class="space-y-1">
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Job Rating</p>
+                            <p class="font-bold text-emerald-600 flex items-center gap-1">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i> ${job.rating}/5.0
+                            </p>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Location</p>
+                            <p class="font-bold text-slate-700">${job.location}</p>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Industry</p>
+                            <p class="font-bold text-slate-700">${job.industries}</p>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Seniority</p>
+                            <p class="font-bold text-slate-700">${job.seniority_level}</p>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Targeted Schools</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${job.assigned_schools.map(school => `
+                                <span class="px-4 py-2 bg-white border-2 border-indigo-50 text-indigo-700 font-bold rounded-2xl text-sm shadow-sm">
+                                    ${school}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="space-y-8 mb-24">
+                        <section>
+                            <h4 class="text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
+                                <span class="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+                                Job Overview
+                            </h4>
+                            <p class="text-slate-600 leading-relaxed font-medium">${job.job_description}</p>
+                        </section>
+
+                        <section>
+                            <h4 class="text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
+                                <span class="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+                                About ${job.company_name}
+                            </h4>
+                            <p class="text-slate-600 leading-relaxed font-medium">${job.about_company}</p>
+                        </section>
+                    </div>
+
+                    <div class="fixed bottom-0 right-0 w-full sm:w-[550px] p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex gap-4">
+                        <button class="flex-grow bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-[0.98]">
+                            APPLY NOW
+                        </button>
+                        <button class="px-5 py-4 border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-colors text-slate-400 hover:text-rose-500">
+                            <i data-lucide="heart" class="w-6 h-6"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            panel.classList.remove('translate-x-full');
+            backdrop.classList.remove('hidden');
+            setTimeout(() => {
+                backdrop.classList.add('opacity-100');
+                lucide.createIcons();
+            }, 10);
+            
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDetails() {
+            const panel = document.getElementById('detailPanel');
+            const backdrop = document.getElementById('detailBackdrop');
+
+            panel.classList.add('translate-x-full');
+            backdrop.classList.remove('opacity-100');
+            setTimeout(() => {
+                backdrop.classList.add('hidden');
+                document.body.style.overflow = '';
+            }, 400);
+        }
+
+        // Event Listeners
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            activeFilters.search = e.target.value;
+            renderJobs();
+        });
+
+        document.getElementById('schoolFilter').addEventListener('change', (e) => {
+            activeFilters.school = e.target.value;
+            renderJobs();
+        });
+
+        document.getElementById('jobRatingFilter').addEventListener('change', (e) => {
+            activeFilters.jobRating = e.target.value;
+            renderJobs();
+        });
+
+        document.getElementById('companyRatingFilter').addEventListener('change', (e) => {
+            activeFilters.companyRating = e.target.value;
+            renderJobs();
+        });
+
+        document.getElementById('clearFilters').addEventListener('click', () => {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('schoolFilter').value = '';
+            document.getElementById('jobRatingFilter').value = '0';
+            document.getElementById('companyRatingFilter').value = '0';
+            activeFilters = { search: '', school: '', jobRating: 0, companyRating: 0, tab: 'all' };
+            setTab('all');
+        });
+
+        window.addEventListener('load', () => {
+            lucide.createIcons();
+            renderJobs();
+        });
+    </script>
+</body>
+</html>

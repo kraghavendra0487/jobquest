@@ -1,0 +1,98 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.pipeline_companies (
+  id integer NOT NULL DEFAULT nextval('pipeline_companies_id_seq'::regclass),
+  company_name text NOT NULL,
+  company_link text UNIQUE,
+  file_name text UNIQUE,
+  status text DEFAULT 'pending'::text,
+  timestamp text NOT NULL,
+  date text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  rating numeric DEFAULT 0,
+  CONSTRAINT pipeline_companies_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.pipeline_company_details (
+  id integer NOT NULL DEFAULT nextval('pipeline_company_details_id_seq'::regclass),
+  company_id integer NOT NULL UNIQUE,
+  website text,
+  industry text,
+  followers_count text,
+  employees_count text,
+  company_size text,
+  location text,
+  founded text,
+  company_type text,
+  specialties text,
+  about_us text,
+  timestamp text NOT NULL,
+  date text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_company_details_pkey PRIMARY KEY (id),
+  CONSTRAINT pipeline_company_details_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.pipeline_companies(id)
+);
+CREATE TABLE public.pipeline_job_details (
+  id integer NOT NULL DEFAULT nextval('pipeline_job_details_id_seq'::regclass),
+  job_link_id integer NOT NULL UNIQUE,
+  company_id integer,
+  job_title text,
+  location text,
+  posted_time text,
+  applicant_count text,
+  job_description text,
+  seniority_level text,
+  employment_type text,
+  job_function text,
+  industries text,
+  timestamp text NOT NULL,
+  date text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  rating numeric DEFAULT 0,
+  assigned_schools ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT pipeline_job_details_pkey PRIMARY KEY (id),
+  CONSTRAINT pipeline_job_details_job_link_id_fkey FOREIGN KEY (job_link_id) REFERENCES public.pipeline_job_links(id),
+  CONSTRAINT pipeline_job_details_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.pipeline_companies(id)
+);
+CREATE TABLE public.pipeline_job_links (
+  id integer NOT NULL DEFAULT nextval('pipeline_job_links_id_seq'::regclass),
+  html_id integer NOT NULL,
+  job_link text NOT NULL UNIQUE,
+  details_file text UNIQUE,
+  status text DEFAULT 'pending'::text,
+  timestamp text NOT NULL,
+  date text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_job_links_pkey PRIMARY KEY (id),
+  CONSTRAINT pipeline_job_links_html_id_fkey FOREIGN KEY (html_id) REFERENCES public.pipeline_step1_output(id)
+);
+CREATE TABLE public.pipeline_step1_output (
+  id integer NOT NULL DEFAULT nextval('pipeline_step1_output_id_seq'::regclass),
+  file_name text NOT NULL UNIQUE,
+  status text DEFAULT 'pending'::text,
+  timestamp text NOT NULL,
+  date text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pipeline_step1_output_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.schools (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL,
+  code character varying,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT schools_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  email text NOT NULL UNIQUE,
+  name text,
+  usn text UNIQUE,
+  role text DEFAULT 'student'::text,
+  created_at timestamp without time zone DEFAULT now(),
+  school_id uuid,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT users_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
+);

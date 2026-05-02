@@ -25,9 +25,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { studentSidebarItems } from './studentNavigation';
+import { adminSidebarItems } from './adminNavigation';
 
-export default function StudentShell({ session, userData, children }) {
+export default function AdminShell({ session, userData, children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -37,27 +37,27 @@ export default function StudentShell({ session, userData, children }) {
   };
 
   return (
-    <Box minH="100vh" bg="orange.50">
-      <Box
-        bg="whiteAlpha.900"
-        backdropFilter="blur(12px)"
-        borderBottom="1px"
-        borderColor="orange.100"
-        position="fixed"
-        top={0}
-        left={0}
-        right={0}
+    <Box minH="100vh" bg="gray.50">
+      {/* Top Header */}
+      <Box 
+        bg="white" 
+        borderBottom="1px" 
+        borderColor="gray.100" 
+        position="fixed" 
+        top={0} 
+        left={0} 
+        right={0} 
         zIndex="sticky"
       >
         <Container maxW="full" px={6}>
           <Flex h={16} align="center" justify="space-between">
             <HStack spacing={3}>
-              <Box bg="orange.500" p={1.5} borderRadius="lg" color="white">
+              <Box bg="blue.600" p={1.5} borderRadius="lg" color="white">
                 <Icon as={GraduationCap} boxSize={6} />
               </Box>
               <Box>
-                <Heading size="md" tracking="tight">RVU Student Portal</Heading>
-                <Text fontSize="xs" color="gray.500">Student access</Text>
+                <Heading size="md" tracking="tight">RVU Portal</Heading>
+                <Text fontSize="xs" color="gray.500">Admin access</Text>
               </Box>
             </HStack>
 
@@ -65,7 +65,7 @@ export default function StudentShell({ session, userData, children }) {
               <IconButton
                 variant="ghost"
                 icon={<Icon as={Bell} boxSize={5} />}
-                color="orange.500"
+                color="gray.500"
                 aria-label="Notifications"
               />
               <Menu>
@@ -96,19 +96,21 @@ export default function StudentShell({ session, userData, children }) {
       </Box>
 
       <Flex pt={16}>
+        {/* Sidebar */}
         <Box
           w="260px"
           bg="white"
           borderRight="1px"
-          borderColor="orange.100"
+          borderColor="gray.200"
           position="fixed"
           h="calc(100vh - 64px)"
           py={8}
           px={4}
           display={{ base: 'none', md: 'block' }}
+          zIndex="docked"
         >
           <VStack align="stretch" spacing={2}>
-            {studentSidebarItems.map((item) => {
+            {adminSidebarItems.map((item) => {
               const isActive =
                 item.path === '/'
                   ? location.pathname === '/'
@@ -120,13 +122,16 @@ export default function StudentShell({ session, userData, children }) {
                   as={Link}
                   to={item.path}
                   variant={isActive ? 'solid' : 'ghost'}
-                  colorScheme={isActive ? 'orange' : 'gray'}
+                  colorScheme={isActive ? 'blue' : 'gray'}
                   justifyContent="flex-start"
                   leftIcon={<Icon as={item.icon} />}
                   size="md"
                   borderRadius="xl"
                   fontSize="sm"
                   fontWeight={isActive ? 'bold' : 'medium'}
+                  _hover={{
+                    bg: isActive ? 'blue.600' : 'gray.100',
+                  }}
                 >
                   {item.name}
                 </Button>
@@ -135,6 +140,7 @@ export default function StudentShell({ session, userData, children }) {
           </VStack>
         </Box>
 
+        {/* Main Content */}
         <Box flex="1" ml={{ base: 0, md: '260px' }} p={8}>
           {children}
         </Box>

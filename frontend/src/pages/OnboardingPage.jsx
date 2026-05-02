@@ -51,7 +51,18 @@ export default function OnboardingPage({ session, onComplete }) {
   }, [toast]);
 
   useEffect(() => {
-    fetchSchools();
+    let isMounted = true;
+
+    const loadSchools = async () => {
+      if (!isMounted) return;
+      await fetchSchools();
+    };
+
+    loadSchools();
+
+    return () => {
+      isMounted = false;
+    };
   }, [fetchSchools]);
 
   const handleSubmit = async () => {

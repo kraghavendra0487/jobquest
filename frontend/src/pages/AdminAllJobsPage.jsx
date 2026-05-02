@@ -31,6 +31,7 @@ import {
 } from '@chakra-ui/react';
 import {
   Search,
+  BriefcaseBusiness,
   Building2,
   MapPin,
   Star,
@@ -44,7 +45,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatRelative } from '../lib/relativeTime';
-import StudentShell from './student/StudentShell';
+import AdminShell from './admin/AdminShell';
 
 const JOBS_PER_PAGE = 24;
 
@@ -56,7 +57,7 @@ const TABS = [
   { id: 'premium', label: 'Premium', icon: Award },
 ];
 
-export default function StudentJobsPage({ session, userData }) {
+export default function AdminAllJobsPage({ session, userData }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   
@@ -67,16 +68,16 @@ export default function StudentJobsPage({ session, userData }) {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     search: '',
+    school: '',
     jobRating: '0',
     companyRating: '0',
   });
 
-  // Fetch data - student view only shows approved jobs for their school
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Using the new student-specific endpoint that filters by school on the server
-      const data = await api('/api/student/all-jobs');
+      const data = await api('/api/admin/all-jobs/merged-jobs');
+      console.log("Jobs data:", data);
       setJobs(Array.isArray(data) ? data : []);
     } catch (err) {
       toast({
@@ -96,6 +97,7 @@ export default function StudentJobsPage({ session, userData }) {
   }, [fetchData]);
 
   const filteredJobs = useMemo(() => {
+    // Calculate IST today and yesterday strings
     const getIstParts = (date) => {
       return new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Kolkata',
@@ -129,14 +131,16 @@ export default function StudentJobsPage({ session, userData }) {
       
       // Tab filter
       let matchesTab = true;
+      
+      // Use created_at as the primary "posted time" reference for time-based classification
       const jobTimestamp = job.created_at || job.date;
       const jobIstDate = jobTimestamp ? (() => {
         const jp = getIstParts(new Date(jobTimestamp));
         return `${jp.find(x => x.type === 'year').value}-${jp.find(x => x.type === 'month').value}-${jp.find(x => x.type === 'day').value}`;
       })() : '';
       
-      const jobRating = Number(job.ai_score || job.rating || 0);
-      const companyRating = Number(job.company_rating || 0);
+      const jobRating = job.rating ?? 0;
+      const companyRating = job.company_rating ?? 0;
       
       if (activeTab === 'today') {
         matchesTab = jobIstDate === todayStr;
@@ -149,10 +153,11 @@ export default function StudentJobsPage({ session, userData }) {
       }
 
       // Select filters
+      const matchesSchool = !filters.school || (job.assigned_schools && Array.isArray(job.assigned_schools) && job.assigned_schools.includes(filters.school));
       const matchesJobRating = jobRating >= parseFloat(filters.jobRating);
       const matchesCoRating = companyRating >= parseFloat(filters.companyRating);
 
-      return matchesSearch && matchesTab && matchesJobRating && matchesCoRating;
+      return matchesSearch && matchesTab && matchesSchool && matchesJobRating && matchesCoRating;
     });
   }, [jobs, filters, activeTab]);
 
@@ -162,9 +167,22 @@ export default function StudentJobsPage({ session, userData }) {
     return filteredJobs.slice(start, start + JOBS_PER_PAGE);
   }, [filteredJobs, page]);
 
+  // Reset page when filters change
   useEffect(() => {
     setPage(1);
   }, [filters, activeTab]);
+
+  const allSchools = useMemo(() => {
+    const schools = new Set();
+    jobs.forEach(job => {
+      if (job?.assigned_schools && Array.isArray(job.assigned_schools)) {
+        job.assigned_schools.forEach(school => {
+          if (school) schools.add(school);
+        });
+      }
+    });
+    return Array.from(schools).sort();
+  }, [jobs]);
 
   const handleOpenJob = (job) => {
     setSelectedJob(job);
@@ -174,6 +192,7 @@ export default function StudentJobsPage({ session, userData }) {
   const resetFilters = () => {
     setFilters({
       search: '',
+      school: '',
       jobRating: '0',
       companyRating: '0',
     });
@@ -181,9 +200,10 @@ export default function StudentJobsPage({ session, userData }) {
   };
 
   return (
-    <StudentShell session={session} userData={userData}>
+    <AdminShell session={session} userData={userData}>
       <Container maxW="7xl">
         <Stack spacing={8}>
+          {/* Top part like Student Jobs Page */}
           <Box
             bgGradient="linear(to-r, orange.500, pink.500)"
             color="white"
@@ -195,11 +215,11 @@ export default function StudentJobsPage({ session, userData }) {
             <HStack justify="space-between" align={{ base: 'start', md: 'center' }} flexWrap="wrap" spacing={4}>
               <VStack align="start" spacing={2}>
                 <Badge bg="whiteAlpha.300" color="white" px={3} py={1} borderRadius="full">
-                  Student Jobs
+                  Admin View
                 </Badge>
-                <Heading size="lg">Explore approved jobs</Heading>
+                <Heading size="lg">All Jobs Directory</Heading>
                 <Text color="whiteAlpha.900" maxW="2xl">
-                  View and apply for the best opportunities approved for your school.
+                  Manage and oversee all jobs across the platform. Use the filters to find specific opportunities.
                 </Text>
               </VStack>
               <Box
@@ -209,32 +229,19 @@ export default function StudentJobsPage({ session, userData }) {
                 borderRadius="2xl"
                 px={5}
                 py={4}
-                minW="220px"
               >
-                <Text fontSize="xs" textTransform="uppercase" color="whiteAlpha.700" mb={1}>Current Scope</Text>
-                <Heading size="md">{userData?.school || 'Your School'}</Heading>
+                <VStack align="start" spacing={0}>
+                  <Text fontSize="sm" fontWeight="bold" color="whiteAlpha.800">
+                    Total Jobs
+                  </Text>
+                  <Heading size="xl">{jobs.length}</Heading>
+                </VStack>
               </Box>
             </HStack>
           </Box>
 
+          {/* Tabs Section */}
           <Stack spacing={6}>
-            <Flex justify="flex-end" flexWrap="wrap">
-              <InputGroup maxW="xl" size="lg">
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={Search} color="gray.400" />
-                </InputLeftElement>
-                <Input
-                  placeholder="Search jobs, companies, or keywords..."
-                  bg="gray.100"
-                  border="none"
-                  borderRadius="2xl"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  _focus={{ bg: 'white', boxShadow: '0 0 0 2px var(--chakra-colors-blue-500)' }}
-                />
-              </InputGroup>
-            </Flex>
-
             <HStack spacing={1} overflowX="auto" pb={2} borderBottom="1px solid" borderColor="gray.100">
               {TABS.map((tab) => (
                 <Button
@@ -259,12 +266,40 @@ export default function StudentJobsPage({ session, userData }) {
             </HStack>
           </Stack>
 
+          {/* Combined Search and Filters Section */}
           <Stack spacing={4}>
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 6 }} spacing={4} alignItems="center">
               <HStack bg="orange.50" color="orange.700" px={3} py={2} borderRadius="xl" fontWeight="bold" fontSize="xs">
                 <Icon as={SlidersHorizontal} />
                 <Text>FILTERS</Text>
               </HStack>
+
+              <InputGroup size="md">
+                <InputLeftElement pointerEvents="none">
+                  <Icon as={Search} color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  placeholder="Search jobs..."
+                  bg="white"
+                  borderRadius="xl"
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  _focus={{ borderColor: 'blue.500', boxShadow: '0 0 0 1px blue.500' }}
+                />
+              </InputGroup>
+
+              <Select
+                size="md"
+                placeholder="All Schools"
+                bg="white"
+                borderRadius="xl"
+                value={filters.school}
+                onChange={(e) => setFilters({ ...filters, school: e.target.value })}
+              >
+                {allSchools.map(school => (
+                  <option key={school} value={school}>{school}</option>
+                ))}
+              </Select>
 
               <Select
                 size="md"
@@ -303,12 +338,13 @@ export default function StudentJobsPage({ session, userData }) {
             </SimpleGrid>
           </Stack>
 
+          {/* Job Grid */}
           <Box minH="400px">
             {loading ? (
               <Flex justify="center" align="center" h="400px">
                 <VStack spacing={4}>
                   <Spinner size="xl" color="orange.500" thickness="4px" />
-                  <Text color="gray.500" fontWeight="medium">Loading the best jobs for you...</Text>
+                  <Text color="gray.500" fontWeight="medium">Fetching real data...</Text>
                 </VStack>
               </Flex>
             ) : (
@@ -319,6 +355,7 @@ export default function StudentJobsPage({ session, userData }) {
                     <Heading size="md">{filteredJobs.length} Matches Found</Heading>
                   </VStack>
                   
+                  {/* Pagination Controls */}
                   {totalPages > 1 && (
                     <HStack spacing={2}>
                       <IconButton
@@ -350,7 +387,7 @@ export default function StudentJobsPage({ session, userData }) {
 
                 {pagedJobs.length === 0 ? (
                   <Flex justify="center" align="center" h="200px" bg="gray.50" borderRadius="3xl">
-                    <Text color="gray.500">No jobs found for your school matching these criteria.</Text>
+                    <Text color="gray.500">No jobs found matching your criteria.</Text>
                   </Flex>
                 ) : (
                   <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 4 }} spacing={6}>
@@ -369,14 +406,14 @@ export default function StudentJobsPage({ session, userData }) {
                         <CardBody p={6}>
                           <VStack align="start" spacing={5} h="full">
                             <HStack w="full" justify="space-between">
-                              <Box bgGradient="linear(to-br, orange.400, pink.500)" p={3} borderRadius="2xl" color="white" shadow="md">
+                              <Box bgGradient="linear(to-br, blue.500, purple.600)" p={3} borderRadius="2xl" color="white" shadow="md">
                                 <Icon as={Building2} boxSize={6} />
                               </Box>
                               <VStack align="end" spacing={1}>
                                 <Text fontSize="10px" fontWeight="black" color="gray.400" textTransform="uppercase">
                                   {formatRelative(job.created_at || job.date) || 'N/A'}
                                 </Text>
-                                {Number(job.ai_score || job.rating || 0) >= 8 && Number(job.company_rating || 0) >= 8 && (
+                                {Number(job.rating) >= 8 && Number(job.company_rating) >= 8 && (
                                   <Badge colorScheme="orange" variant="subtle" borderRadius="full" fontSize="10px" px={2} border="1px solid" borderColor="orange.100">
                                     <HStack spacing={1}>
                                       <Icon as={Award} boxSize={3} />
@@ -392,42 +429,48 @@ export default function StudentJobsPage({ session, userData }) {
                                 {job.job_title || 'Untitled Job'}
                               </Heading>
                               <HStack spacing={1}>
-                                <Text fontSize="sm" fontWeight="bold" color="gray.600" noOfLines={1}>{job.company_name || 'N/A'}</Text>
-                                <HStack spacing={0.5} color="orange.400">
-                                  <Icon as={Star} fill="currentColor" boxSize={3} />
-                                  <Text fontSize="xs" fontWeight="bold">{Number(job.company_rating || 0).toFixed(1)}</Text>
+                                  <Text fontSize="sm" fontWeight="bold" color="gray.600" noOfLines={1}>{job.company_name || 'N/A'}</Text>
+                                  <HStack spacing={0.5} color="orange.400">
+                                    <Icon as={Star} fill={job.company_rating ? "currentColor" : "none"} boxSize={3} />
+                                    <Text fontSize="xs" fontWeight="bold">{job.company_rating ?? "-"}</Text>
+                                  </HStack>
                                 </HStack>
-                              </HStack>
-                            </VStack>
+                              </VStack>
 
-                            <Stack spacing={2.5} w="full" mt="auto">
-                              <HStack fontSize="xs" color="gray.500" fontWeight="medium">
-                                <Icon as={MapPin} boxSize={3.5} color="gray.400" />
-                                <Text noOfLines={1}>{job.location || 'N/A'}</Text>
+                              <HStack wrap="wrap" spacing={1.5}>
+                                {job.assigned_schools && Array.isArray(job.assigned_schools) && job.assigned_schools.slice(0, 2).map((school) => (
+                                  <Badge key={`${job.id}-${school}`} colorScheme="blue" variant="subtle" fontSize="10px" px={2} borderRadius="md" border="1px solid" borderColor="blue.100">
+                                    @{school}
+                                  </Badge>
+                                ))}
+                                {job.assigned_schools && job.assigned_schools.length > 2 && (
+                                  <Text fontSize="10px" fontWeight="bold" color="gray.400">+{job.assigned_schools.length - 2}</Text>
+                                )}
                               </HStack>
-                              <HStack fontSize="xs" color="gray.500" fontWeight="medium">
-                                <Icon as={Award} boxSize={3.5} color="gray.400" />
-                                <Text noOfLines={1}>{job.seniority_level || 'N/A'}</Text>
-                              </HStack>
-                            </Stack>
 
-                            <Divider borderColor="gray.50" />
+                              <Stack spacing={2.5} w="full" mt="auto">
+                                <HStack fontSize="xs" color="gray.500" fontWeight="medium">
+                                  <Icon as={MapPin} boxSize={3.5} color="gray.400" />
+                                  <Text noOfLines={1}>{job.location || 'N/A'}</Text>
+                                </HStack>
+                                <HStack fontSize="xs" color="gray.500" fontWeight="medium">
+                                  <Icon as={Award} boxSize={3.5} color="gray.400" />
+                                  <Text noOfLines={1}>{job.seniority_level || 'N/A'}</Text>
+                                </HStack>
+                              </Stack>
 
-                            <HStack w="full" justify="space-between" align="center">
-                              <Badge colorScheme="orange" variant="subtle" borderRadius="lg" px={2.5} py={1} fontSize="xs">
+                              <Divider borderColor="gray.50" />
+
+                              <HStack w="full" justify="space-between" align="center">
+                              <Badge colorScheme={job.rating ? "green" : "gray"} variant="subtle" borderRadius="lg" px={2.5} py={1} fontSize="xs">
                                 <HStack spacing={1}>
                                   <ShieldCheck size={14} />
-                                  <Text>Score: {Number(job.ai_score || job.rating || 0).toFixed(1)}</Text>
+                                  <Text>Job Score: {job.rating ?? "-"}</Text>
                                 </HStack>
                               </Badge>
-                              <Button
-                                size="xs"
-                                variant="ghost"
-                                colorScheme="orange"
-                                rightIcon={<ExternalLink size={12} />}
-                              >
-                                Details
-                              </Button>
+                              <Text fontSize="10px" color="gray.400" fontWeight="bold" textTransform="uppercase">
+                                {job.applicant_count || 0} APPLIED
+                              </Text>
                             </HStack>
                           </VStack>
                         </CardBody>
@@ -436,6 +479,7 @@ export default function StudentJobsPage({ session, userData }) {
                   </SimpleGrid>
                 )}
                 
+                {/* Bottom Pagination */}
                 {totalPages > 1 && (
                   <Flex justify="center" mt={10} pb={10}>
                     <HStack spacing={4}>
@@ -447,7 +491,7 @@ export default function StudentJobsPage({ session, userData }) {
                         }}
                         isDisabled={page === 1}
                         variant="ghost"
-                        colorScheme="orange"
+                        colorScheme="blue"
                         borderRadius="xl"
                       >
                         Previous
@@ -465,7 +509,7 @@ export default function StudentJobsPage({ session, userData }) {
                               key={pageNum}
                               size="sm"
                               variant={page === pageNum ? "solid" : "outline"}
-                              colorScheme="orange"
+                              colorScheme="blue"
                               onClick={() => {
                                 setPage(pageNum);
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -486,7 +530,7 @@ export default function StudentJobsPage({ session, userData }) {
                         }}
                         isDisabled={page === totalPages}
                         variant="ghost"
-                        colorScheme="orange"
+                        colorScheme="blue"
                         borderRadius="xl"
                       >
                         Next
@@ -500,6 +544,7 @@ export default function StudentJobsPage({ session, userData }) {
         </Stack>
       </Container>
 
+      {/* Detail Slide-over Panel (Drawer) */}
       <Drawer
         isOpen={isOpen}
         placement="right"
@@ -520,9 +565,10 @@ export default function StudentJobsPage({ session, userData }) {
             {selectedJob && (
               <Box mt={10}>
                 <VStack align="start" spacing={8}>
+                  {/* Header */}
                   <HStack spacing={6} align="center">
                     <Box 
-                      bgGradient="linear(to-br, orange.400, pink.500)" 
+                      bgGradient="linear(to-br, blue.500, purple.600)" 
                       p={5} 
                       borderRadius="3xl" 
                       color="white" 
@@ -535,12 +581,12 @@ export default function StudentJobsPage({ session, userData }) {
                         {selectedJob.job_title || 'Untitled Job'}
                       </Heading>
                       <HStack spacing={3}>
-                        <Text color="orange.500" fontWeight="extrabold" fontSize="lg">
+                        <Text color="blue.600" fontWeight="extrabold" fontSize="lg">
                           {selectedJob.company_name || 'N/A'}
                         </Text>
                         <HStack bg="orange.50" px={3} py={1} borderRadius="full" color="orange.400">
                           <Icon as={Star} fill="currentColor" boxSize={4} />
-                          <Text fontWeight="black" fontSize="sm">{Number(selectedJob.company_rating || 0).toFixed(1)}</Text>
+                          <Text fontWeight="black" fontSize="sm">{selectedJob.company_rating ?? "-"}</Text>
                         </HStack>
                       </HStack>
                       <Text fontSize="10px" color="gray.400" fontWeight="bold" textTransform="uppercase">
@@ -549,40 +595,72 @@ export default function StudentJobsPage({ session, userData }) {
                     </VStack>
                   </HStack>
 
-                  <SimpleGrid columns={2} spacing={6} w="full" bg="orange.50" p={6} borderRadius="3xl">
+                  {/* Quick Info Grid */}
+                  <SimpleGrid columns={2} spacing={6} w="full" bg="gray.50" p={6} borderRadius="3xl">
                     <VStack align="start" spacing={1}>
-                      <Text fontSize="10px" color="orange.600" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
-                        Job Score
+                      <Text fontSize="10px" color="gray.400" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
+                        Job Rating
                       </Text>
-                      <HStack color="orange.700" fontWeight="bold">
+                      <HStack color="green.600" fontWeight="bold">
                         <Icon as={ShieldCheck} />
-                        <Text>{Number(selectedJob.ai_score || selectedJob.rating || 0).toFixed(1)}/10.0</Text>
+                        <Text>{selectedJob.rating ?? "-"}/10.0</Text>
                       </HStack>
                     </VStack>
                     <VStack align="start" spacing={1}>
-                      <Text fontSize="10px" color="orange.600" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
+                      <Text fontSize="10px" color="gray.400" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
                         Location
                       </Text>
                       <Text fontWeight="bold" color="gray.700">{selectedJob.location || 'N/A'}</Text>
                     </VStack>
                     <VStack align="start" spacing={1}>
-                      <Text fontSize="10px" color="orange.600" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
+                      <Text fontSize="10px" color="gray.400" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
                         Industry
                       </Text>
                       <Text fontWeight="bold" color="gray.700" noOfLines={1}>{selectedJob.industries || 'N/A'}</Text>
                     </VStack>
                     <VStack align="start" spacing={1}>
-                      <Text fontSize="10px" color="orange.600" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
+                      <Text fontSize="10px" color="gray.400" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
                         Seniority
                       </Text>
                       <Text fontWeight="bold" color="gray.700">{selectedJob.seniority_level || 'N/A'}</Text>
                     </VStack>
                   </SimpleGrid>
 
+                  {/* Targeted Schools */}
+                  <VStack align="start" spacing={4} w="full">
+                    <Text fontSize="xs" color="gray.400" fontWeight="black" textTransform="uppercase" letterSpacing="widest">
+                      Targeted Schools
+                    </Text>
+                    <HStack wrap="wrap" spacing={2}>
+                      {selectedJob.assigned_schools && Array.isArray(selectedJob.assigned_schools) && selectedJob.assigned_schools.length > 0 ? (
+                        selectedJob.assigned_schools.map((school) => (
+                          <Box 
+                            key={`${selectedJob.id}-detail-${school}`} 
+                            px={4} 
+                            py={2} 
+                            bg="white" 
+                            border="2px solid" 
+                            borderColor="blue.50" 
+                            color="blue.700" 
+                            fontWeight="bold" 
+                            borderRadius="2xl" 
+                            fontSize="sm" 
+                            shadow="sm"
+                          >
+                            {school}
+                          </Box>
+                        ))
+                      ) : (
+                        <Text color="gray.400" fontSize="sm">No schools assigned</Text>
+                      )}
+                    </HStack>
+                  </VStack>
+
+                  {/* Sections */}
                   <VStack align="start" spacing={8} w="full" pb={24}>
                     <VStack align="start" spacing={3}>
                       <HStack spacing={2}>
-                        <Box w="1.5" h="6" bg="orange.400" borderRadius="full" />
+                        <Box w="1.5" h="6" bg="blue.600" borderRadius="full" />
                         <Heading size="md" fontWeight="black">Job Overview</Heading>
                       </HStack>
                       <Text color="gray.600" fontWeight="medium" lineHeight="relaxed">
@@ -592,7 +670,7 @@ export default function StudentJobsPage({ session, userData }) {
 
                     <VStack align="start" spacing={3}>
                       <HStack spacing={2}>
-                        <Box w="1.5" h="6" bg="orange.400" borderRadius="full" />
+                        <Box w="1.5" h="6" bg="blue.600" borderRadius="full" />
                         <Heading size="md" fontWeight="black">About {selectedJob.company_name || 'the company'}</Heading>
                       </HStack>
                       <Text color="gray.600" fontWeight="medium" lineHeight="relaxed">
@@ -605,6 +683,7 @@ export default function StudentJobsPage({ session, userData }) {
             )}
           </DrawerBody>
 
+          {/* Fixed Footer */}
           <Box 
             position="absolute" 
             bottom={0} 
@@ -623,7 +702,7 @@ export default function StudentJobsPage({ session, userData }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 flexGrow={1} 
-                colorScheme="orange" 
+                colorScheme="blue" 
                 size="lg" 
                 h={16} 
                 borderRadius="2xl" 
@@ -649,6 +728,6 @@ export default function StudentJobsPage({ session, userData }) {
           </Box>
         </DrawerContent>
       </Drawer>
-    </StudentShell>
+    </AdminShell>
   );
 }

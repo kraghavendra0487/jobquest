@@ -46,7 +46,7 @@ function estimateCost({ promptTokens, expectedCompletionTokens, model = MODEL })
 } 
  
 // Connectivity preflight — fail loud if OpenAI is unreachable 
-async function preflight() { 
+async function preflight(model = MODEL) { 
   if (!client) {
     return {
       ok: false,
@@ -56,7 +56,7 @@ async function preflight() {
   }
   try { 
     await client.models.list(); 
-    return { ok: true, model: MODEL }; 
+    return { ok: true, model }; 
   } catch (e) { 
     return { 
       ok: false, 
@@ -260,29 +260,56 @@ async function chatJSON(args) {
 
 // Like chatJSON but flexible: userContent can be a string OR object,
 // and jsonMode can be disabled for free-form text responses.
-async function chatJSONOrText({ systemPrompt, userContent, jsonMode = true, purpose, promptId, promptName, batchId, uploadId, triggeredBy }) {
+async function chatJSONOrText({ systemPrompt, userContent, jsonMode = true, purpose, promptId, promptName, batchId, uploadId, triggeredBy, model = MODEL, webSearch = false }) {
   const t0 = Date.now();
   const userMessage = typeof userContent === 'string' ? userContent : JSON.stringify(userContent);
   const promptText = (systemPrompt || '') + '\n' + userMessage;
-  const promptTokens = countTokens(promptText);
+  const promptTokens = countTokens(promptText, model);
 
   let resp, error_message = null, status = 'failed';
   let completionTokens = 0, content = null;
+  let usedPromptTokens = promptTokens;
+  let usedModel = model;
 
   try {
     if (!client) throw new Error('OPENAI_API_KEY is missing.');
-    const params = {
-      model: MODEL,
-      messages: [
-        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.2,
-    };
-    if (jsonMode) params.response_format = { type: 'json_object' };
-    resp = await client.chat.completions.create(params);
-    content = resp.choices[0].message.content;
-    completionTokens = resp.usage?.completion_tokens ?? countTokens(content);
+
+    if (webSearch) {
+      resp = await client.responses.create({
+        model,
+        input: [
+          ...(systemPrompt ? [{
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt }],
+          }] : []),
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: userMessage }],
+          },
+        ],
+        tools: [{ type: 'web_search' }],
+        tool_choice: 'auto',
+      });
+
+      content = (resp.output_text || '').trim();
+      completionTokens = resp.usage?.output_tokens ?? countTokens(content, model);
+      usedPromptTokens = resp.usage?.input_tokens ?? promptTokens;
+    } else {
+      const params = {
+        model,
+        messages: [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.2,
+      };
+      if (jsonMode) params.response_format = { type: 'json_object' };
+      resp = await client.chat.completions.create(params);
+      content = resp.choices[0].message.content;
+      completionTokens = resp.usage?.completion_tokens ?? countTokens(content, model);
+      usedPromptTokens = resp.usage?.prompt_tokens ?? promptTokens;
+    }
+
     status = 'success';
   } catch (e) {
     error_message = e?.message || String(e);
@@ -290,15 +317,16 @@ async function chatJSONOrText({ systemPrompt, userContent, jsonMode = true, purp
 
   const duration_ms = Date.now() - t0;
   const cost_usd = estimateCost({
-    promptTokens: resp?.usage?.prompt_tokens ?? promptTokens,
+    promptTokens: usedPromptTokens,
     expectedCompletionTokens: completionTokens,
+    model: usedModel,
   });
 
   try {
     await supabase.from('ai_usage_log').insert({
       purpose, prompt_id: promptId || null, prompt_name_snapshot: promptName || null,
-      model: MODEL,
-      prompt_tokens: resp?.usage?.prompt_tokens ?? promptTokens,
+      model: usedModel,
+      prompt_tokens: usedPromptTokens,
       completion_tokens: completionTokens,
       cost_usd, duration_ms, status, error_message,
       batch_id: batchId || null, upload_id: uploadId || null, triggered_by: triggeredBy || null,
@@ -316,8 +344,9 @@ async function chatJSONOrText({ systemPrompt, userContent, jsonMode = true, purp
   return {
     content,                                                      // raw string
     parsed: jsonMode ? robustJSONParse(content) : null,                // only if JSON mode
-    promptTokens: resp.usage.prompt_tokens,
+    promptTokens: usedPromptTokens,
     completionTokens, cost_usd, duration_ms,
+    model: usedModel,
   };
 }
 

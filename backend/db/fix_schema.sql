@@ -146,7 +146,7 @@ create table if not exists public.companies (
   name varchar(255) not null unique,
   display_name varchar(255),
   name_normalized varchar(255),
-  rating int check (rating >= 1 and rating <= 5),
+  rating numeric(2,1) check (rating >= 1.0 and rating <= 5.0),
   reason text,
   notes text,
   rated_by varchar(20) default 'ai',

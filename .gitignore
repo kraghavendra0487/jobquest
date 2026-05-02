@@ -35,3 +35,6 @@ backend/uploads/
 # Root level folders and files
 trash/
 rls_users.sql
+
+# LinkedIn scrape / pipeline outputs (HTML, xlsx, etc.)
+Pipeline/
