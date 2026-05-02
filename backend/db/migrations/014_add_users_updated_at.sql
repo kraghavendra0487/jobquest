@@ -1,4 +1,4 @@
--- Add updated_at to users if missing (for older DBs created before fix_schema.sql)
+-- Add updated_at to users if missing (for older DBs)
 alter table public.users
   add column if not exists updated_at timestamptz not null default now();
 
