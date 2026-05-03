@@ -9,9 +9,10 @@ import {
 import {
   RefreshCw, Search, Star,
   CheckCircle2,
-  Sparkles, Filter
+  Sparkles, Filter, Download
 } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { api } from '../lib/api';
 import AdminShell from './admin/AdminShell';
 
@@ -25,7 +26,6 @@ export default function AdminPipelineJobsPage({ session, userData }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showRated, setShowRated] = useState(true);
   const [showUnrated, setShowUnrated] = useState(true);
-  const [showLowRatedOnly, setShowLowRatedOnly] = useState(false);
   const [selectedSchools, setSelectedSchools] = useState([]);
   const [isBulkAiRunning, setIsBulkAiRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
@@ -116,19 +116,55 @@ Description: ${job.job_description || 'No description available.'}`;
     else if (showRated) matchesTabs = isRated;
     else if (showUnrated) matchesTabs = !isRated;
 
-    const matchesRating = !showLowRatedOnly || (j.rating > 0 && j.rating <= 7);
-    
     const matchesSchools = 
       selectedSchools.length === 0 || 
       (j.assigned_schools && j.assigned_schools.some(s => selectedSchools.includes(s)));
 
-    return matchesTabs && matchesRating && matchesSchools;
+    return matchesTabs && matchesSchools;
   }).filter(j => 
     j.job_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     j.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const unratedCount = jobs.filter(j => (j.rating === 0 || !j.rating)).length;
+
+  const jobRowForExport = (j) => {
+    const row = {};
+    for (const [k, v] of Object.entries(j)) {
+      if (k === 'pipeline_companies') continue;
+      if (v === null || v === undefined) {
+        row[k] = '';
+      } else if (Array.isArray(v)) {
+        row[k] = v.join(', ');
+      } else if (typeof v === 'object') {
+        row[k] = JSON.stringify(v);
+      } else {
+        row[k] = v;
+      }
+    }
+    const pc = j.pipeline_companies && typeof j.pipeline_companies === 'object' ? j.pipeline_companies : null;
+    if (pc) {
+      for (const [k, val] of Object.entries(pc)) {
+        const key = `company_${k}`;
+        if (val !== null && val !== undefined && typeof val === 'object' && !Array.isArray(val)) {
+          row[key] = JSON.stringify(val);
+        } else if (Array.isArray(val)) {
+          row[key] = val.join(', ');
+        } else {
+          row[key] = val === null || val === undefined ? '' : val;
+        }
+      }
+    }
+    return row;
+  };
+
+  const downloadExcel = () => {
+    const rows = jobs.map(jobRowForExport);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Jobs');
+    XLSX.writeFile(wb, `Pipeline_Jobs_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   return (
     <AdminShell session={session} userData={userData}>
@@ -159,6 +195,18 @@ Description: ${job.job_description || 'No description available.'}`;
               />
             </InputGroup>
 
+            <Button
+              leftIcon={<Download size={18} />}
+              colorScheme="blue"
+              variant="outline"
+              borderRadius="xl"
+              bg="white"
+              onClick={downloadExcel}
+              isDisabled={jobs.length === 0}
+            >
+              Export
+            </Button>
+
             <Menu closeOnSelect={false}>
               <MenuButton 
                 as={Button} 
@@ -170,17 +218,6 @@ Description: ${job.job_description || 'No description available.'}`;
                 Filters {selectedSchools.length > 0 && `(${selectedSchools.length})`}
               </MenuButton>
               <MenuList borderRadius="xl" shadow="xl" p={2} minW="240px">
-                <Box px={3} py={2}>
-                  <Text fontWeight="bold" fontSize="xs" color="gray.500" textTransform="uppercase" mb={2}>Rating</Text>
-                  <Checkbox 
-                    colorScheme="orange" 
-                    isChecked={showLowRatedOnly}
-                    onChange={(e) => setShowLowRatedOnly(e.target.checked)}
-                  >
-                    <Text fontSize="sm">7 or below rated jobs</Text>
-                  </Checkbox>
-                </Box>
-                <MenuDivider />
                 <Box px={3} py={2}>
                   <Text fontWeight="bold" fontSize="xs" color="gray.500" textTransform="uppercase" mb={2}>Schools</Text>
                   <VStack align="stretch" spacing={1} maxH="200px" overflowY="auto">
@@ -283,36 +320,39 @@ Description: ${job.job_description || 'No description available.'}`;
                     <Thead bg="gray.50">
                       <Tr>
                         <Th py={4}>Job Title</Th>
-                        <Th py={4}>Company</Th>
+                        <Th py={4}>Company Rating</Th>
                         <Th py={4}>Schools</Th>
-                        <Th py={4}>Rating</Th>
+                        <Th py={4}>Job Rating</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
                       {rateTabJobs.map(job => (
                         <Tr key={job.id} _hover={{ bg: 'orange.50' }}>
-                          <Td><Text fontWeight="bold" color="blue.600" cursor="pointer" onClick={() => navigate(`/admin-job-detail/${job.id}`)} _hover={{ textDecoration: 'underline' }} isTruncated maxW="200px">{job.job_title}</Text></Td>
+                          <Td maxW="220px">
+                            <VStack align="start" spacing={0.5}>
+                              <Text fontWeight="bold" color="blue.600" cursor="pointer" onClick={() => navigate(`/admin-job-detail/${job.id}`)} _hover={{ textDecoration: 'underline' }} isTruncated w="full">{job.job_title}</Text>
+                              <Text fontSize="xs" color="gray.500" isTruncated w="full" title={job.company_name}>{job.company_name}</Text>
+                            </VStack>
+                          </Td>
                           <Td>
-                            <HStack spacing={2}>
-                              <Text fontWeight="bold" fontSize="xs" color="gray.700" textTransform="uppercase">
-                                {job.company_name}
-                              </Text>
-                              {job.company_rating > 0 && (
-                                <HStack 
-                                  bg="green.500" 
-                                  color="white" 
-                                  px={1.5} 
-                                  py={0.5} 
-                                  borderRadius="md" 
-                                  spacing={0.5}
-                                  fontSize="10px"
-                                  fontWeight="black"
-                                >
-                                  <Text>{job.company_rating}</Text>
-                                  <Icon as={Star} size={8} fill="white" />
-                                </HStack>
-                              )}
-                            </HStack>
+                            {job.company_rating > 0 ? (
+                              <HStack
+                                bg="green.500"
+                                color="white"
+                                px={1.5}
+                                py={0.5}
+                                borderRadius="md"
+                                spacing={0.5}
+                                fontSize="10px"
+                                fontWeight="black"
+                                w="fit-content"
+                              >
+                                <Text>{job.company_rating}</Text>
+                                <Icon as={Star} size={8} fill="white" />
+                              </HStack>
+                            ) : (
+                              <Text fontSize="xs" color="gray.400">—</Text>
+                            )}
                           </Td>
                           <Td>
                             <HStack spacing={1} wrap="wrap">

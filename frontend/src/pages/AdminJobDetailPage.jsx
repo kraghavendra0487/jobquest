@@ -370,8 +370,16 @@ Description: ${job.job_description || 'No description available.'}`;
                       <Icon as={Building2} boxSize={8} color="blue.600" />
                     </Box>
                     <Box>
-                      <Heading size="md">About {job.pipeline_companies.company_name}</Heading>
-                      <Text fontSize="sm" color="gray.600">{job.pipeline_companies.industry || 'Industry not specified'}</Text>
+                      <Heading size="md">Company rating</Heading>
+                      <Text fontSize="sm" fontWeight="semibold" color="gray.800">{job.pipeline_companies.company_name}</Text>
+                      <HStack spacing={2} flexWrap="wrap" align="center">
+                        <Text fontSize="sm" color="gray.600">{job.pipeline_companies.industry || 'Industry not specified'}</Text>
+                        {(job.pipeline_companies.rating || 0) > 0 && (
+                          <Badge colorScheme="green" borderRadius="md" px={2} py={0.5}>
+                            Score {job.pipeline_companies.rating}/10
+                          </Badge>
+                        )}
+                      </HStack>
                     </Box>
                   </HStack>
                   <Button
@@ -407,15 +415,6 @@ Description: ${job.job_description || 'No description available.'}`;
                     )}
                   </VStack>
                 </Grid>
-
-                {job.pipeline_companies.about_us && (
-                  <Box>
-                    <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" mb={2}>Company Overview</Text>
-                    <Text color="gray.700" fontSize="sm" noOfLines={4}>
-                      {job.pipeline_companies.about_us}
-                    </Text>
-                  </Box>
-                )}
               </VStack>
             </CardBody>
           </Card>

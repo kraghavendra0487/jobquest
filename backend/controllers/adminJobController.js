@@ -23,30 +23,32 @@ exports.listMergedJobs = async (req, res) => {
       }
     }
 
+    // Use * on pipeline_job_details so DBs missing optional columns (e.g. approved, ai_score) still work.
     let q = supabase
       .from('pipeline_job_details')
       .select(`
-        id,
-        job_title,
-        location,
-        rating,
-        assigned_schools,
-        created_at,
-        company_id,
-        seniority_level,
-        applicant_count,
-        industries,
-        job_description,
+        *,
+        pipeline_job_links ( job_link ),
         pipeline_companies (
           id,
           company_name,
+          company_link,
+          status,
           rating,
           pipeline_company_details (
-            about_us,
+            website,
             industry,
-            location,
+            followers_count,
+            employees_count,
             company_size,
-            website
+            location,
+            founded,
+            company_type,
+            specialties,
+            about_us,
+            timestamp,
+            date,
+            created_at
           )
         )
       `)
@@ -75,18 +77,20 @@ exports.listMergedJobs = async (req, res) => {
         ? { ...companyCore, ...details }
         : null;
 
+      const jl = Array.isArray(job.pipeline_job_links)
+        ? job.pipeline_job_links[0]
+        : job.pipeline_job_links;
+      const jobLink = jl?.job_link ?? null;
+
+      const {
+        pipeline_companies: _pc,
+        pipeline_job_links: _jl,
+        ...jobScalars
+      } = job;
+
       return {
-        id: job.id,
-        job_title: job.job_title,
-        location: job.location,
-        rating: job.rating,
-        assigned_schools: job.assigned_schools,
-        created_at: job.created_at,
-        company_id: job.company_id,
-        seniority_level: job.seniority_level,
-        applicant_count: job.applicant_count,
-        industries: job.industries,
-        job_description: job.job_description,
+        ...jobScalars,
+        job_link: jobLink,
         company_name: company?.company_name ?? null,
         company_rating: company?.rating ?? null,
         pipeline_companies: pipeline_companies_flat,
