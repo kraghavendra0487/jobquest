@@ -68,7 +68,7 @@ export default function StudentJobsPage({ session, userData }) {
   const [filters, setFilters] = useState({
     search: '',
     jobRating: '0',
-    companyRating: '0',
+    companyRating: '7',
   });
 
   // Fetch data - student view only shows approved jobs for their school
@@ -175,7 +175,7 @@ export default function StudentJobsPage({ session, userData }) {
     setFilters({
       search: '',
       jobRating: '0',
-      companyRating: '0',
+      companyRating: '7',
     });
     setActiveTab('all');
   };
@@ -199,7 +199,7 @@ export default function StudentJobsPage({ session, userData }) {
                 </Badge>
                 <Heading size="lg">Explore approved jobs</Heading>
                 <Text color="whiteAlpha.900" maxW="2xl">
-                  View and apply for the best opportunities approved for your school.
+                  View and apply for roles approved for your school. Listings are limited to companies rated 7+ (server-side).
                 </Text>
               </VStack>
               <Box
@@ -281,14 +281,15 @@ export default function StudentJobsPage({ session, userData }) {
 
               <Select
                 size="md"
-                placeholder="Company Rating: Any"
+                placeholder="Company Rating: 7+"
                 bg="white"
                 borderRadius="xl"
                 value={filters.companyRating}
                 onChange={(e) => setFilters({ ...filters, companyRating: e.target.value })}
               >
-                <option value="4">4+ Stars</option>
-                <option value="4.5">4.5+ Stars</option>
+                <option value="7">7+ Stars</option>
+                <option value="8">8+ Stars</option>
+                <option value="9">9+ Stars</option>
               </Select>
 
               <Button

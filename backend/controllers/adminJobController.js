@@ -1,11 +1,29 @@
 const { supabase } = require('../config/supabase');
 
+async function companyIdsWithMinRating(minRating) {
+  const n = Number(minRating);
+  if (Number.isNaN(n) || n <= 0) return null;
+  const { data, error } = await supabase.from('pipeline_companies').select('id').gte('rating', n);
+  if (error) throw error;
+  return (data || []).map((r) => r.id);
+}
+
 /**
  * GET /api/admin/jobs/merged-jobs
+ * Optional query: min_company_rating (number) — only jobs whose pipeline_companies.rating meets the threshold.
  */
 exports.listMergedJobs = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const minCoRaw = req.query.min_company_rating;
+    let companyIdFilter = null;
+    if (minCoRaw !== undefined && minCoRaw !== '') {
+      companyIdFilter = await companyIdsWithMinRating(minCoRaw);
+      if (!companyIdFilter || companyIdFilter.length === 0) {
+        return res.json([]);
+      }
+    }
+
+    let q = supabase
       .from('pipeline_job_details')
       .select(`
         id,
@@ -33,6 +51,12 @@ exports.listMergedJobs = async (req, res) => {
         )
       `)
       .order('created_at', { ascending: false });
+
+    if (companyIdFilter) {
+      q = q.in('company_id', companyIdFilter);
+    }
+
+    const { data, error } = await q;
 
     if (error) {
       console.error('[adminJobController.listMergedJobs] Supabase:', error);

@@ -3,6 +3,9 @@ const School = require('../models/schoolModel');
 const { hydrateJobCompacts } = require('../utils/jobNormalizer');
 const { dedupeJobsBySimilarity } = require('../utils/jobDeduper');
 
+/** Student-facing job lists only include jobs at companies rated this or higher (0–10 scale). */
+const STUDENT_MIN_COMPANY_RATING = 7;
+
 /** DB: pipeline_job_details (+ joins). Maps to legacy "jobs" shape for hydrate/dedupe. */
 const PIPELINE_JOB_SELECT = `
   id,
@@ -130,12 +133,17 @@ function buildPipelineJobsQuery({
   min_score = '',
   sort = 'ai_score',
   order = 'desc',
+  companyIds = null,
 }) {
   const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
   const pageSize = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 20));
   const offset = (pageNumber - 1) * pageSize;
 
   let q = supabase.from('pipeline_job_details').select(PIPELINE_JOB_SELECT, { count: 'exact' });
+
+  if (Array.isArray(companyIds) && companyIds.length > 0) {
+    q = q.in('company_id', companyIds);
+  }
 
   if (search) {
     const safe = escapePctUnderscore(search.trim()).replace(/,/g, ' ');
@@ -184,7 +192,23 @@ exports.listStudentJobs = async (req, res) => {
       return res.json({ data: [], total: 0, page: 1, limit: 20, source: 'no-school-identifiers' });
     }
 
-    const { pageNumber, pageSize, query } = buildPipelineJobsQuery(req.query);
+    const { data: ratedCompanies, error: coErr } = await supabase
+      .from('pipeline_companies')
+      .select('id')
+      .gte('rating', STUDENT_MIN_COMPANY_RATING);
+    if (coErr) throw coErr;
+    const companyIds = (ratedCompanies || []).map((r) => r.id);
+    if (companyIds.length === 0) {
+      return res.json({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: Math.max(1, Math.min(100, Number.parseInt(req.query.limit, 10) || 20)),
+        source: 'no-companies-at-min-rating',
+      });
+    }
+
+    const { pageNumber, pageSize, query } = buildPipelineJobsQuery({ ...req.query, companyIds });
     const jobsQuery = query.overlaps('assigned_schools', schoolIdentifiers);
 
     const { data, error, count } = await jobsQuery;
@@ -239,6 +263,16 @@ exports.listAllJobs = async (req, res) => {
       return res.json([]);
     }
 
+    const { data: ratedCompanies, error: coErr } = await supabase
+      .from('pipeline_companies')
+      .select('id')
+      .gte('rating', STUDENT_MIN_COMPANY_RATING);
+    if (coErr) throw coErr;
+    const companyIds = (ratedCompanies || []).map((r) => r.id);
+    if (companyIds.length === 0) {
+      return res.json([]);
+    }
+
     const { data, error } = await supabase
       .from('pipeline_job_details')
       .select(`
@@ -257,6 +291,7 @@ exports.listAllJobs = async (req, res) => {
         )
       `)
       .overlaps('assigned_schools', schoolIdentifiers)
+      .in('company_id', companyIds)
       .order('created_at', { ascending: false });
 
     if (error) {

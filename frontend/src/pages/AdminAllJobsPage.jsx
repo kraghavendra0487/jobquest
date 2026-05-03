@@ -70,13 +70,13 @@ export default function AdminAllJobsPage({ session, userData }) {
     search: '',
     school: '',
     jobRating: '0',
-    companyRating: '0',
+    companyRating: '7',
   });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api('/api/admin/all-jobs/merged-jobs');
+      const data = await api('/api/admin/all-jobs/merged-jobs?min_company_rating=7');
       console.log("Jobs data:", data);
       setJobs(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -194,7 +194,7 @@ export default function AdminAllJobsPage({ session, userData }) {
       search: '',
       school: '',
       jobRating: '0',
-      companyRating: '0',
+      companyRating: '7',
     });
     setActiveTab('all');
   };
@@ -219,7 +219,7 @@ export default function AdminAllJobsPage({ session, userData }) {
                 </Badge>
                 <Heading size="lg">All Jobs Directory</Heading>
                 <Text color="whiteAlpha.900" maxW="2xl">
-                  Manage and oversee all jobs across the platform. Use the filters to find specific opportunities.
+                  Directory is loaded with companies rated 7+ only (API). Use filters to narrow further.
                 </Text>
               </VStack>
               <Box
@@ -316,14 +316,15 @@ export default function AdminAllJobsPage({ session, userData }) {
 
               <Select
                 size="md"
-                placeholder="Company Rating: Any"
+                placeholder="Company Rating: 7+"
                 bg="white"
                 borderRadius="xl"
                 value={filters.companyRating}
                 onChange={(e) => setFilters({ ...filters, companyRating: e.target.value })}
               >
-                <option value="4">4+ Stars</option>
-                <option value="4.5">4.5+ Stars</option>
+                <option value="7">7+ Stars</option>
+                <option value="8">8+ Stars</option>
+                <option value="9">9+ Stars</option>
               </Select>
 
               <Button

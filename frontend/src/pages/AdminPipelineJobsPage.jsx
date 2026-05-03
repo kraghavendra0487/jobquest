@@ -1,41 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Box, Container, Flex, Heading, Text, Avatar, IconButton, Menu, MenuButton,
-  MenuList, MenuItem, Divider, Icon, Button, VStack, HStack, Table, Thead,
-  Tbody, Tr, Th, Td, Spinner, useToast, Checkbox, Popover, PopoverTrigger,
-  PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton,
-  Stack, Input, InputGroup, InputLeftElement, Badge,
-  Tabs, TabList, TabPanels, Tab, TabPanel, Tooltip,
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-  useDisclosure, SimpleGrid, RadioGroup, Radio, Stack as ChakraStack,
-  FormControl, FormLabel, NumberInput, NumberInputField, 
-  NumberInputStepper, NumberIncrementStepper, NumberDecrementStepper,
-  Textarea, MenuDivider
+  Box, Flex, Heading, Text, IconButton, Menu, MenuButton,
+  MenuList, MenuItem, Icon, Button, VStack, HStack, Table, Thead,
+  Tbody, Tr, Th, Td, Spinner, useToast, Checkbox,
+  Input, InputGroup, InputLeftElement, Badge,
+  MenuDivider
 } from '@chakra-ui/react';
 import {
-  RefreshCw, Building2, Search, ListFilter, ChevronRight, Star, 
-  Download, CheckCircle2, ChevronLeft, LayoutList, MapPin, Globe, ExternalLink,
+  RefreshCw, Search, Star,
+  CheckCircle2,
   Sparkles, Filter
 } from "lucide-react";
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import AdminShell from './admin/AdminShell';
-
-const ALL_COLUMNS = [
-  { id: 'job_title', label: 'Job Title' },
-  { id: 'company_name', label: 'Company' },
-  { id: 'assigned_schools', label: 'Assigned Schools' },
-  { id: 'location', label: 'Location' },
-  { id: 'rating', label: 'Rating (0-10)' },
-  { id: 'posted_time', label: 'Posted' },
-  { id: 'applicant_count', label: 'Applicants' },
-  { id: 'seniority_level', label: 'Seniority' },
-  { id: 'employment_type', label: 'Type' },
-  { id: 'industries', label: 'Industries' },
-  { id: 'date', label: 'Date' },
-  { id: 'created_at', label: 'Created At' },
-];
 
 export default function AdminPipelineJobsPage({ session, userData }) {
   const navigate = useNavigate();
@@ -51,10 +29,6 @@ export default function AdminPipelineJobsPage({ session, userData }) {
   const [selectedSchools, setSelectedSchools] = useState([]);
   const [isBulkAiRunning, setIsBulkAiRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
-  const [visibleColumns, setVisibleColumns] = useState(() => {
-    const saved = localStorage.getItem('pipeline_job_columns');
-    return saved ? JSON.parse(saved) : ['job_title', 'company_name', 'assigned_schools', 'location', 'rating', 'date'];
-  });
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,15 +43,6 @@ export default function AdminPipelineJobsPage({ session, userData }) {
   };
 
   useEffect(() => { fetchData(); }, []);
-
-  const toggleColumn = (colId) => {
-    let newCols = visibleColumns.includes(colId) 
-      ? visibleColumns.filter(id => id !== colId) 
-      : [...visibleColumns, colId];
-    if (newCols.length === 0) return;
-    setVisibleColumns(newCols);
-    localStorage.setItem('pipeline_job_columns', JSON.stringify(newCols));
-  };
 
   const handleBulkAiRate = async () => {
     const unrated = jobs.filter(j => (!j.rating || j.rating === 0));
@@ -143,20 +108,6 @@ Description: ${job.job_description || 'No description available.'}`;
     return Array.from(schools).sort();
   }, [jobs]);
 
-  const filteredJobs = jobs.filter(j => {
-    const matchesSearch = 
-      j.job_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      j.company_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesRating = !showLowRatedOnly || (j.rating > 0 && j.rating <= 7);
-    
-    const matchesSchools = 
-      selectedSchools.length === 0 || 
-      (j.assigned_schools && j.assigned_schools.some(s => selectedSchools.includes(s)));
-
-    return matchesSearch && matchesRating && matchesSchools;
-  });
-
   const rateTabJobs = jobs.filter(j => {
     const isRated = j.rating > 0;
     
@@ -184,7 +135,12 @@ Description: ${job.job_description || 'No description available.'}`;
       <VStack align="stretch" spacing={6}>
         <Flex justify="space-between" align="end">
           <Box>
-            <Heading size="lg" letterSpacing="tight">Job Management (New)</Heading>
+            <HStack spacing={3} align="center">
+              <Heading size="lg" letterSpacing="tight">Job Rating</Heading>
+              <Badge colorScheme="orange" borderRadius="full" px={2} fontSize="xs">
+                {unratedCount} unrated
+              </Badge>
+            </HStack>
             <Text color="gray.500" fontSize="sm">Manage pipeline job search results and ratings</Text>
           </Box>
           
@@ -202,24 +158,6 @@ Description: ${job.job_description || 'No description available.'}`;
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </InputGroup>
-
-            <Popover closeOnBlur={false} placement="bottom-end">
-              <PopoverTrigger>
-                <Button leftIcon={<ListFilter size={18} />} variant="outline" borderRadius="xl" bg="white">Columns</Button>
-              </PopoverTrigger>
-              <PopoverContent borderRadius="2xl" shadow="2xl" p={2} w="200px">
-                <PopoverHeader border="none" fontWeight="bold">Show Columns</PopoverHeader>
-                <PopoverBody>
-                  <VStack align="start" spacing={1}>
-                    {ALL_COLUMNS.map(col => (
-                      <Checkbox key={col.id} isChecked={visibleColumns.includes(col.id)} onChange={() => toggleColumn(col.id)} colorScheme="blue" w="full" p={1} _hover={{ bg: 'gray.50', borderRadius: 'md' }}>
-                        <Text fontSize="sm">{col.label}</Text>
-                      </Checkbox>
-                    ))}
-                  </VStack>
-                </PopoverBody>
-              </PopoverContent>
-            </Popover>
 
             <Menu closeOnSelect={false}>
               <MenuButton 
@@ -292,113 +230,7 @@ Description: ${job.job_description || 'No description available.'}`;
           </HStack>
         </Flex>
 
-        <Tabs colorScheme="blue" variant="enclosed" bg="white" borderRadius="2xl" border="1px" borderColor="gray.100" overflow="hidden">
-          <TabList px={4} pt={4} borderBottom="1px" borderColor="gray.100">
-            <Tab fontWeight="bold" fontSize="sm" _selected={{ color: 'blue.600', borderBottom: '2px solid' }}>
-              Overview
-            </Tab>
-            <Tab fontWeight="bold" fontSize="sm" _selected={{ color: 'blue.600', borderBottom: '2px solid' }}>
-              Rate Jobs
-              <Badge ml={2} colorScheme="orange" borderRadius="full" px={2}>{unratedCount}</Badge>
-            </Tab>
-          </TabList>
-
-          <TabPanels>
-            {/* OVERVIEW TAB */}
-            <TabPanel p={0}>
-              {loading ? (
-                <Flex justify="center" py={20}><Spinner color="blue.500" /></Flex>
-              ) : (
-                <Box overflowX="auto">
-                  <Table variant="simple">
-                    <Thead bg="gray.50">
-                      <Tr>
-                        {ALL_COLUMNS.filter(c => visibleColumns.includes(c.id)).map(col => (
-                          <Th key={col.id} color="gray.600" fontSize="xs" py={4}>{col.label}</Th>
-                        ))}
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {filteredJobs.map(job => (
-                        <Tr key={job.id} _hover={{ bg: 'blue.50' }}>
-                          {visibleColumns.includes('job_title') && (
-                            <Td><Text fontWeight="bold" color="blue.600" cursor="pointer" onClick={() => navigate(`/admin-job-detail/${job.id}`)} _hover={{ textDecoration: 'underline' }} isTruncated maxW="200px">{job.job_title}</Text></Td>
-                          )}
-                          {visibleColumns.includes('company_name') && (
-                            <Td>
-                              <HStack spacing={2}>
-                                <Text fontWeight="bold" fontSize="xs" color="gray.700" textTransform="uppercase">
-                                  {job.company_name}
-                                </Text>
-                                {job.company_rating > 0 && (
-                                  <HStack 
-                                    bg="green.500" 
-                                    color="white" 
-                                    px={1.5} 
-                                    py={0.5} 
-                                    borderRadius="md" 
-                                    spacing={0.5}
-                                    fontSize="10px"
-                                    fontWeight="black"
-                                  >
-                                    <Text>{job.company_rating}</Text>
-                                    <Icon as={Star} size={8} fill="white" />
-                                  </HStack>
-                                )}
-                              </HStack>
-                            </Td>
-                          )}
-                          {visibleColumns.includes('assigned_schools') && (
-                            <Td>
-                              <HStack spacing={1} wrap="wrap">
-                                {job.assigned_schools && job.assigned_schools.length > 0 ? (
-                                  job.assigned_schools.map(code => (
-                                    <Badge key={code} colorScheme="blue" variant="solid" fontSize="10px">
-                                      {code}
-                                    </Badge>
-                                  ))
-                                ) : (
-                                  <Text fontSize="xs" color="gray.400">-</Text>
-                                )}
-                              </HStack>
-                            </Td>
-                          )}
-                          {visibleColumns.includes('location') && <Td isTruncated maxW="150px" fontSize="sm">{job.location}</Td>}
-                          {visibleColumns.includes('rating') && (
-                            <Td>
-                              <HStack spacing={1}>
-                                <HStack spacing={0.5}>
-                                  {[1, 2, 3, 4, 5].map((star) => (
-                                    <Icon 
-                                      key={star}
-                                      as={Star} 
-                                      size={12} 
-                                      color={star <= (job.rating / 2) ? "orange.400" : "gray.200"} 
-                                      fill={star <= (job.rating / 2) ? "orange.400" : "none"} 
-                                    />
-                                  ))}
-                                </HStack>
-                                <Text fontSize="xs" fontWeight="bold" color="gray.600">{job.rating || 0}</Text>
-                              </HStack>
-                            </Td>
-                          )}
-                          {visibleColumns.includes('posted_time') && <Td fontSize="sm">{job.posted_time}</Td>}
-                          {visibleColumns.includes('applicant_count') && <Td fontSize="sm">{job.applicant_count}</Td>}
-                          {visibleColumns.includes('seniority_level') && <Td fontSize="sm">{job.seniority_level}</Td>}
-                          {visibleColumns.includes('employment_type') && <Td fontSize="sm">{job.employment_type}</Td>}
-                          {visibleColumns.includes('industries') && <Td fontSize="xs" isTruncated maxW="150px">{job.industries}</Td>}
-                          {visibleColumns.includes('date') && <Td fontSize="sm">{job.date}</Td>}
-                          {visibleColumns.includes('created_at') && <Td fontSize="xs">{new Date(job.created_at).toLocaleString()}</Td>}
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </Box>
-              )}
-            </TabPanel>
-
-            {/* RATE TAB */}
-            <TabPanel p={0}>
+        <Box bg="white" borderRadius="2xl" border="1px" borderColor="gray.100" overflow="hidden">
               <Box p={4} borderBottom="1px" borderColor="gray.100" bg="gray.50">
                 <Flex justify="space-between" align="center">
                   <HStack spacing={6}>
@@ -518,15 +350,13 @@ Description: ${job.job_description || 'No description available.'}`;
                         </Tr>
                       ))}
                       {rateTabJobs.length === 0 && (
-                        <Tr><Td colSpan={3} textAlign="center" py={20} color="gray.400"><VStack spacing={2}><Icon as={CheckCircle2} size={40} color="green.400" /><Text fontWeight="bold">No jobs matching filters!</Text></VStack></Td></Tr>
+                        <Tr><Td colSpan={4} textAlign="center" py={20} color="gray.400"><VStack spacing={2}><Icon as={CheckCircle2} size={40} color="green.400" /><Text fontWeight="bold">No jobs matching filters!</Text></VStack></Td></Tr>
                       )}
                     </Tbody>
                   </Table>
                 </Box>
               )}
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+        </Box>
       </VStack>
     </AdminShell>
   );
